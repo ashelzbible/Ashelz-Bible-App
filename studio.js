@@ -41,7 +41,7 @@ window.StudioKit = function(E){
 
   /* ---------- how one post looks (Devotions page, Homecell page, Studio list) ---------- */
   function PostCard(p, extra){
-    var kids = [h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('play')), p.title)];
+    var kids = [h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('play')), p.title), h('p', { class: 'note', style: 'margin-top:-4px' }, 'From Ashelz · ' + (p.at ? new Date(p.at).toDateString().slice(0, 10) : ''))];
     if(p.ref) kids.push(h('p', { class: 'note' }, p.ref));
     if(p.video) kids.push(h('video', { class: 'postmedia', src: p.video, controls: true, playsinline: true, preload: 'metadata', 'aria-label': 'Video: ' + p.title, style: 'width:100%;max-height:420px;border-radius:12px;background:#000' }));
     if(p.image) kids.push(h('img', { class: 'postmedia', src: p.image, alt: p.title, loading: 'lazy', style: 'width:100%;border-radius:12px;display:block' }));
@@ -57,10 +57,10 @@ window.StudioKit = function(E){
   /* a block for the Devotions page and one for the Homecell page; each loads its posts when it is shown */
   function Block(title, filter, note){
     var box = h('div', { class: 'stack postblock', 'data-block': title }), wrap = h('div', { class: 'stack' }, h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, title), box);
-    fetchFeed().then(function(all){ var list = all.filter(filter).slice(0, 8); box.innerHTML = '';
-      if(!list.length){ wrap.style.display = 'none'; return; }
-      if(note) box.appendChild(h('p', { class: 'note' }, note));
-      list.forEach(function(p){ box.appendChild(PostCard(p)); }); });
+    function paint(all){ var list = all.filter(filter).slice(0, 8); box.innerHTML = ''; if(!list.length){ wrap.style.display = 'none'; return; } wrap.style.display = '';
+      if(note) box.appendChild(h('p', { class: 'note' }, note)); list.forEach(function(p){ box.appendChild(PostCard(p)); }); }
+    paint(cached());          /* what this phone already knows shows at once */
+    fetchFeed().then(paint);  /* then the newest list replaces it */
     return wrap;
   }
 
