@@ -23,7 +23,7 @@ window.StudioKit = function(E){
     p.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryIn(); });
     return E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' }, h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('account')), 'Developer sign in'), h('p', { class: 'note' }, 'This area is only for the app developer. Readers do not need to sign in to read, watch or download devotions.'), u, p, h('button', { class: 'btn block', type: 'button', id: 'dv-go', style: 'margin-top:10px', onclick: tryIn }, 'Sign in'), msg)));
   }
-  function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
+  function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; if(c.repo === 'ashelzbible/Ashelz-Bible-App' && a.publishRepo) c.repo = ''; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
   function esc(s){ return String(s == null ? '' : s); }
   function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
 
@@ -70,13 +70,21 @@ window.StudioKit = function(E){
   function b64(blob){ return new Promise(function(res, rej){ var f = new FileReader(); f.onload = function(){ res(String(f.result).split(',')[1] || ''); }; f.onerror = rej; f.readAsDataURL(blob); }); }
   function b64text(s){ return btoa(unescape(encodeURIComponent(s))); }
   function fromB64(s){ return decodeURIComponent(escape(atob(String(s).replace(/\s/g, '')))); }
-  function putFile(path, content64, message, sha){ var c = cfg(), body = { message: message, content: content64, branch: c.branch }; if(sha) body.sha = sha; return api(path, { method: 'PUT', body: JSON.stringify(body) }); }
+  /* uploads use XMLHttpRequest so the screen can show real progress, and give up with a clear message instead of waiting for ever */
+  function putFile(path, content64, message, sha, onProgress){ var c = cfg(), body = { message: message, content: content64, branch: c.branch }; if(sha) body.sha = sha;
+    return new Promise(function(res, rej){ var x = new XMLHttpRequest(); x.open('PUT', 'https://api.github.com/repos/' + c.repo + '/contents/' + path); x.timeout = 300000;
+      x.setRequestHeader('Accept', 'application/vnd.github+json'); x.setRequestHeader('Authorization', 'Bearer ' + c.token); x.setRequestHeader('X-GitHub-Api-Version', '2022-11-28'); x.setRequestHeader('Content-Type', 'application/json');
+      if(x.upload && onProgress) x.upload.onprogress = function(e){ if(e.lengthComputable) onProgress(Math.round(e.loaded * 100 / e.total)); };
+      x.onload = function(){ var j = {}; try { j = JSON.parse(x.responseText); } catch(e) {} if(x.status >= 200 && x.status < 300) res(j); else { var er = new Error(j.message || ('GitHub error ' + x.status)); er.status = x.status; rej(er); } };
+      x.onerror = function(){ var er = new Error('The connection to GitHub failed. Check the internet and try again.'); er.status = 0; rej(er); };
+      x.ontimeout = function(){ var er = new Error('The upload took too long. Try a shorter or smaller video, or a better connection.'); er.status = 0; rej(er); };
+      x.send(JSON.stringify(body)); }); }
   function getFeedRemote(){ var c = cfg(); return api(FEED, { q: '?ref=' + encodeURIComponent(c.branch) + '&t=' + Date.now() }).then(function(j){ var o; try { o = JSON.parse(fromB64(j.content)); } catch(e) { o = {}; } return { sha: j.sha, data: { posts: o.posts || [] } }; }, function(e){ if(e.status === 404) return { sha: '', data: { posts: [] } }; throw e; }); }
   /* change the feed with a function; retries once if another change landed first */
   function editFeed(fn, message){ function once(){ return getFeedRemote().then(function(cur){ var out = fn(cur.data); return putFile(FEED, b64text(JSON.stringify(out, null, 1)), message, cur.sha).then(function(){ return out; }); }); }
     return once().catch(function(e){ if(e.status === 409 || e.status === 422) return once(); throw e; }); }
   function publish(p, files, onStep){ var base = 'posts/' + p.id + '/', chain = Promise.resolve();
-    files.forEach(function(f){ chain = chain.then(function(){ onStep('Uploading ' + f.label + '...'); return b64(f.blob).then(function(d){ return putFile(base + f.name, d, 'Post media: ' + p.title); }); }); });
+    files.forEach(function(f){ chain = chain.then(function(){ onStep('Preparing ' + f.label + '...'); return b64(f.blob).then(function(d){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) 0%'); return putFile(base + f.name, d, 'Post media: ' + p.title, '', function(pc){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) ' + pc + '%' + (pc >= 100 ? ', waiting for GitHub...' : '')); }); }); }); });
     return chain.then(function(){ onStep('Adding to the Devotions page...'); return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); d.posts.unshift(p); return d; }, 'Post: ' + p.title); }); }
   function removePost(p){ return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); return d; }, 'Remove post: ' + p.title).then(function(){
     return Promise.all(['image', 'video'].map(function(k){ if(!p[k]) return null; var path = p[k]; return api(path, { q: '?ref=' + encodeURIComponent(cfg().branch) }).then(function(j){ return api(path, { method: 'DELETE', body: JSON.stringify({ message: 'Remove post media', sha: j.sha, branch: cfg().branch }) }); }).catch(function(){}); })); }); }
