@@ -106,24 +106,23 @@ window.StudioKit = function(E){
   /* ---------- making a long or big video small enough to post (like WhatsApp): the phone plays it and records a lighter copy ---------- */
   var SQUEEZE_OVER = 8 * 1024 * 1024, TARGET_BYTES = 8000000, MIN_VB = 300000, MAX_VB = 900000, ABR = 64000, MAX_IN = 400 * 1024 * 1024;
   function canSqueeze(){ return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && (window.AudioContext || window.webkitAudioContext)); }
-  function squeeze(file, onP, tk){ return new Promise(function(res, rej){
+  function squeeze(file, onP, tk, silent){ return new Promise(function(res, rej){
     var url = URL.createObjectURL(file), v = document.createElement('video'), cv = document.createElement('canvas'), cx = cv.getContext('2d'), ac, rec, chunks = [], timer, done = false, lock = null;
-    v.playsInline = true; v.preload = 'auto'; v.src = url;
+    v.playsInline = true; v.preload = 'auto'; if(silent) v.muted = true; v.src = url; var lastT = -1, lastMove = Date.now();
     function cleanup(){ clearInterval(timer); try { v.pause(); } catch(e) {} try { ac && ac.close(); } catch(e) {} try { lock && lock.release(); } catch(e) {} URL.revokeObjectURL(url); }
     function fail(m){ if(done) return; done = true; cleanup(); try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) {} rej(new Error(m)); }
     v.onerror = function(){ fail('This video format cannot be read on this phone. Try another video.'); };
     v.onloadedmetadata = function(){ var dur = v.duration; if(!isFinite(dur) || dur <= 0 || !v.videoWidth){ fail('Could not read this video.'); return; }
       var maxDur = Math.min(dur, TARGET_BYTES * 8 / (MIN_VB + ABR)), vb = Math.max(MIN_VB, Math.min(MAX_VB, TARGET_BYTES * 8 / maxDur - ABR)), sc = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
       cv.width = Math.max(2, Math.round(v.videoWidth * sc / 2) * 2); cv.height = Math.max(2, Math.round(v.videoHeight * sc / 2) * 2);
-      try { ac = new (window.AudioContext || window.webkitAudioContext)(); var src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);
-        var stream = cv.captureStream(24); dest.stream.getAudioTracks().forEach(function(t){ stream.addTrack(t); });
+      try { var stream = cv.captureStream(24); if(!silent){ ac = new (window.AudioContext || window.webkitAudioContext)(); if(ac.resume) ac.resume(); var src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest); dest.stream.getAudioTracks().forEach(function(t){ stream.addTrack(t); }); }
         var type = videoType(), opt = { videoBitsPerSecond: vb, audioBitsPerSecond: ABR }; if(type) opt.mimeType = type; rec = new MediaRecorder(stream, opt);
         rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
         rec.onstop = function(){ if(done) return; done = true; cleanup(); var b = new Blob(chunks, { type: /mp4/.test(rec.mimeType || type) ? 'video/mp4' : 'video/webm' }); b.cut = maxDur < dur - 0.5; b.secs = Math.round(Math.min(maxDur, dur)); res(b); };
         rec.start(1000); } catch(e) { fail('This phone cannot make the video smaller.'); return; }
       try { if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ lock = l; }, function(){}); } catch(e) {}
       v.onended = function(){ if(rec && rec.state === 'recording') rec.stop(); };
-      v.play().then(function(){ timer = setInterval(function(){ if(tk.cancel){ fail('cancelled'); return; } try { cx.drawImage(v, 0, 0, cv.width, cv.height); } catch(e) {} onP(Math.min(99, Math.round(v.currentTime * 100 / maxDur))); if(v.currentTime >= maxDur - 0.05 && rec.state === 'recording'){ clearInterval(timer); rec.stop(); } }, 42); }, function(){ fail('The phone would not play the video to make it smaller. Tap Upload video again.'); }); }; }); }
+      v.play().then(function(){ if(ac && ac.state === 'suspended' && ac.resume) ac.resume(); timer = setInterval(function(){ if(tk.cancel){ fail('cancelled'); return; } try { cx.drawImage(v, 0, 0, cv.width, cv.height); } catch(e) {} if(v.currentTime !== lastT){ lastT = v.currentTime; lastMove = Date.now(); } else if(Date.now() - lastMove > 8000 && !v.ended){ fail(silent ? 'The phone could not make this video smaller.' : 'stalled'); return; } onP(Math.min(99, Math.round(v.currentTime * 100 / maxDur)), Math.round(v.currentTime), Math.round(maxDur)); if(v.currentTime >= maxDur - 0.05 && rec.state === 'recording'){ clearInterval(timer); rec.stop(); } }, 42); }, function(){ fail('The phone would not play the video to make it smaller. Tap Upload video again.'); }); }; }); }
 
   /* ---------- the Studio page ---------- */
   function Studio(go){
@@ -146,7 +145,8 @@ window.StudioKit = function(E){
       if(!canSqueeze()){ if(f.size > MAX_VIDEO){ toast('That video is ' + (f.size / 1048576).toFixed(0) + ' MB and this phone cannot make it smaller. The limit is 30 MB.'); return; } state.video = f; showMedia(); return; }
       if(f.size > MAX_IN){ toast('That video is too big to open here. Choose a smaller one.'); return; }
       var tk = { cancel: false }; working = tk; cancelBtn.style.display = ''; refreshReady(); mediaNote.textContent = 'Making the video smaller so it posts quickly... 0%. Keep the app open.';
-      squeeze(f, function(p){ mediaNote.textContent = 'Making the video smaller so it posts quickly... ' + p + '%. Keep the app open.'; }, tk).then(function(b){ working = null; cancelBtn.style.display = 'none'; state.video = b; showMedia(); refreshReady(); toast(b.cut ? 'The video was longer than can post, so it was cut to the first ' + b.secs + ' seconds' : 'The video was made smaller and is ready'); },
+      var show = function(p, a, z){ mediaNote.textContent = 'Making the video smaller so it posts quickly... ' + p + '%' + (z ? ' (' + a + ' of ' + z + ' seconds)' : '') + '. Keep the app open and the screen on.'; };
+      squeeze(f, show, tk).catch(function(e){ if(e.message !== 'stalled') throw e; mediaNote.textContent = 'It stopped moving, trying again without sound...'; return squeeze(f, show, tk, true).then(function(b){ b.muted = true; return b; }); }).then(function(b){ working = null; cancelBtn.style.display = 'none'; state.video = b; showMedia(); refreshReady(); toast((b.muted ? 'This phone could not keep the sound. ' : '') + (b.cut ? 'The video was longer than can post, so it was cut to the first ' + b.secs + ' seconds' : 'The video was made smaller and is ready')); },
         function(e){ working = null; cancelBtn.style.display = 'none'; mediaNote.textContent = 'No picture or video added.'; showMedia(); refreshReady(); if(e.message === 'cancelled'){ toast('Cancelled'); return; } if(f.size <= MAX_VIDEO){ state.video = f; showMedia(); refreshReady(); toast(e.message + ' The original video is used.'); } else toast(e.message); }); }
     var facing = 'user', camOn = false, camBox = h('div', { id: 'st-cam', class: 'row', style: 'display:none;margin-top:8px;gap:8px;flex-wrap:wrap;justify-content:flex-start' });
     var openBtn = h('button', { class: 'btn ghost', type: 'button', id: 'st-cam-open', onclick: function(){ camOn ? closeCam() : openCam(); } }, '📷 Open camera'),
