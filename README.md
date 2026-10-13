@@ -65,3 +65,9 @@ The founder photo shows only on the About page.
 ## Online Homecell (added)
 Create a Homecell (name, leader, weekly day and time) with a private random code, invite by WhatsApp or Facebook, join with a code or link, and test your camera and microphone first. Calls run on Jitsi Meet (meet.jit.si): "Join now" opens the room on its own tab (best on phones), "Join inside Ashelz" opens it full screen in the app. Ashelz does not record or store calls. The Permissions-Policy in `_headers` allows camera and microphone for the app and meet.jit.si.
 Graphics: all 3D icons are 256 px; the 10 original icons were upscaled 2x with sharpening (no new detail), the rest were re-rendered from vector at 256 px.
+
+## Creator Studio (2.4.4)
+Settings, bottom button "Creator Studio (for Ashelz)". The developer can write a devotion, record a video (up to 2 minutes, 30 MB limit), upload a video, add a picture, or just type, then tap Post. It shows on the Devotions page under "From Ashelz", and a post pushed to the Homecell also shows on the Online Homecell page. Anyone can download the text, picture or video from a post.
+- There is no server. Posts are files in the app's GitHub repository (`posts/feed.json` and one folder per post), written with the GitHub API. The developer pastes a fine grained token (this repository only, Contents: Read and write) once; it stays on that device and is never in the app files. Without the token nobody can publish. `publishRepo` in `config.js` sets the default repository.
+- A new post can take a minute or two to appear on other phones while GitHub Pages updates.
+- Tested here against a pretend GitHub (publish, read, download, push to Homecell, delete). Publishing to the real repository still needs a first live try with her token.
