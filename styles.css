@@ -409,3 +409,13 @@ img.i3{filter:saturate(1.2) contrast(1.06) drop-shadow(0 3px 4px rgba(10,31,77,.
 .pstudio .card{background:#13204a;color:#fff}.pstudio textarea,.pstudio select{background:#0a1230;color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:8px;width:100%}.pstudio select{width:auto}.pstudio input[type=range]{width:100%}
 .psfilters{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.chip{flex:none;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:8px 14px;font-weight:600}.chip.on{background:#f6c453;color:#111;border-color:#f6c453}
 .pstudio .psgrid{background:#13204a;border-color:rgba(255,255,255,.2)}.pstudio .psgrid.stk{grid-template-columns:repeat(2,1fr)}.stickerbtn{border:2px solid rgba(255,255,255,.8);border-radius:999px;color:#fff;font-weight:800;padding:10px 8px}
+
+/* clearly visible app icon watermark on every page, profile pictures (2.4.26) */
+.wm{opacity:.16!important;background-size:min(86vmin,600px)!important;background-position:center 52%!important;z-index:0}
+:root[data-theme=dark] .wm{opacity:.2!important}
+#app{position:relative;z-index:1}
+.card,.li,.sheet .card{background:color-mix(in srgb,var(--card) 86%,transparent)}
+.avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,#1b6ef3,#0d2f7a);color:#fff;font-weight:800;border:2px solid #f4c36f;flex:none}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}.avatar.small{width:44px;height:44px;font-size:1rem}.avatar.big{width:92px;height:92px;font-size:1.9rem}
+.hero .avbtn{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;z-index:3;background:none;border:0;padding:0}
+@media(max-width:959px){.sheet::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:url(logo.png) center 50%/min(82vmin,520px) no-repeat;opacity:.14}:root[data-theme=dark] .sheet::before{opacity:.2}.sheet>*{position:relative;z-index:1}}
