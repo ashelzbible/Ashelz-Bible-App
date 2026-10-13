@@ -359,3 +359,23 @@ img.i3{filter:saturate(1.2) contrast(1.06) drop-shadow(0 3px 4px rgba(10,31,77,.
 #miniplayer .mpn{display:none;margin:4px 2px 0;font-size:.72rem}#miniplayer.big{width:min(420px,calc(100vw - 16px))}#miniplayer.big .mpn{display:block}
 #miniplayer .ytwrap{margin:4px 0 0}
 @media(min-width:900px){#miniplayer{left:auto;right:16px;bottom:16px}}
+
+/* greeting page (2.4.19): richer blue sky, centred two line greeting, ribbon verse card, open Bible */
+.hero .greet .g2{display:block}.hero .bless{display:flex;gap:10px;align-items:center}.hero .bless .wave{font-size:2.2rem;line-height:1;flex:none}.hero .orn{margin-top:10px;max-width:260px}.hero .orn svg,.vcard .orn svg{width:100%;height:14px;display:block}
+.vcard .ribbon{display:inline-flex;align-items:center;gap:10px;align-self:center;padding:8px 34px 8px 14px;font-weight:800;font-size:1.05rem;color:#fff;background:linear-gradient(180deg,#2a63d8,#123d96);border-top:2px solid #f4c36f;border-bottom:2px solid #c98f2a;clip-path:polygon(0 0,100% 0,calc(100% - 14px) 50%,100% 100%,0 100%);box-shadow:0 6px 14px rgba(0,0,0,.35);margin-top:2px}
+.vcard .ribbon .i3{width:30px;height:30px}.vcard .vhi{color:#f6c453;font-weight:700}
+.vcard .orn{margin:12px auto 6px;max-width:220px;width:70%}.vcard .ref{text-align:center;color:#f6c453;font-weight:600;margin:4px 0 12px}
+.vcard .vact{display:flex;justify-content:center}
+.vcard .readbtn{background:linear-gradient(180deg,#1f56c9,#0d2f7a)!important;color:#fff!important;border:2px solid #f4c36f;border-radius:999px;padding:12px 30px;box-shadow:0 0 0 3px rgba(244,195,111,.25),0 8px 18px rgba(0,0,0,.4)!important}
+.vcard .openbk{position:absolute;left:0;right:0;bottom:-6px;z-index:2;pointer-events:none;opacity:.95}.vcard .openbk svg{width:100%;height:70px;display:block}
+.vcard{border:2px solid #f4c36f!important;box-shadow:0 0 0 1px rgba(244,195,111,.35),0 0 26px rgba(70,130,255,.35);padding-bottom:78px!important}
+.vcard .vact{position:relative;z-index:1}
+@media(max-width:959px){
+ .hero{background:#0a2a78}.dash .hero{align-items:center;text-align:center}.dash .hero .g{align-self:center;width:100%}
+ .hero .greet{margin-top:10px;line-height:1.05}.hero .greet .g1{display:block;font-size:2.2rem;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5)}.hero .greet .g2{font-size:2.6rem;color:#f6c453;text-shadow:0 2px 10px rgba(0,0,0,.5)}
+ .hero .bless{justify-content:center;text-align:left;margin-top:8px}.hero .bless p{margin:0;font-size:1.02rem}.hero .orn{margin:10px auto 0}
+ .vcard{text-align:center;align-items:center;justify-content:flex-start;gap:4px}.vcard .verse{margin-top:12px;font-size:1.55rem}
+}
+@media(min-width:960px){.hero .greet .g2{display:inline;color:#f6c453}}
+.btn.ready{background:linear-gradient(135deg,#22b455,#0d7d36)!important;box-shadow:0 4px 14px rgba(34,180,85,.5)!important;color:#fff!important}
+@media(max-width:959px){.dash .vcard{min-height:0}}

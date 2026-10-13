@@ -26,7 +26,7 @@ window.Scenes = (function(){
     s += ridge(w, h, 270, 90, 11, c.far) + ridge(w, h, 310, 80, 23, c.mid) + ridge(w, h, 350, 60, 37, c.near);
     s += '<rect y="372" width="' + w + '" height="40" fill="' + c.ground + '"/>';
     if(opts.road) s += '<polygon points="340,400 460,400 418,290 382,290" fill="#d9bd78" opacity=".9"/><polygon points="392,400 408,400 402,290 398,290" fill="#fff6d8" opacity=".55"/>';
-    if(opts.cross) s += '<g transform="translate(' + sunX + ' ' + (sunY - 95) + ')"><rect x="-5" y="0" width="10" height="150" fill="#2a1d12"/><rect x="-34" y="32" width="68" height="10" fill="#2a1d12"/><rect x="-5" y="0" width="3" height="150" fill="#f4c36f" opacity=".7"/></g>';
+    if(opts.cross){ var cs = opts.crossScale || 1; s += '<g transform="translate(' + sunX + ' ' + (sunY - 95 + 150 * (1 - cs)) + ') scale(' + cs + ')"><rect x="-5" y="0" width="10" height="150" fill="#2a1d12"/><rect x="-34" y="32" width="68" height="10" fill="#2a1d12"/><rect x="-5" y="0" width="3" height="150" fill="#f4c36f" opacity=".7"/></g>'; }
     return s + '</svg>';
   }
   return { svg: svg };
