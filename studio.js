@@ -82,16 +82,28 @@ window.StudioKit = function(E){
       mediaNote.textContent = n.length ? n.join(' · ') : 'No picture or video added.'; }
     var imgIn = h('input', { type: 'file', accept: 'image/*', id: 'st-img', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; shrinkImage(f).then(function(b){ state.image = b; showMedia(); }, function(e){ toast(e.message); }); } });
     var vidIn = h('input', { type: 'file', accept: 'video/*', id: 'st-vid', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; if(f.size > MAX_VIDEO){ toast('That video is ' + (f.size / 1048576).toFixed(0) + ' MB. The limit is 30 MB. Record a shorter one.'); return; } state.video = f; showMedia(); } });
-    var recBtn = h('button', { class: 'btn ghost', type: 'button', id: 'st-rec', onclick: function(){ rec && rec.state === 'recording' ? stopRec() : startRec(); } }, '🎥 Record video');
-    function stopStream(){ if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; } live.style.display = 'none'; live.srcObject = null; clearInterval(timer); recBtn.textContent = '🎥 Record video'; }
-    function startRec(){ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){ toast('Recording is not available here. Use Upload video instead.'); return; }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true }).then(function(s){ stream = s; chunks = []; live.srcObject = s; live.style.display = 'block'; live.play().catch(function(){});
-        var type = videoType(), opt = { videoBitsPerSecond: 1000000, audioBitsPerSecond: 64000 }; if(type) opt.mimeType = type; rec = new MediaRecorder(s, opt);
-        rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
-        rec.onstop = function(){ var b = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' }); stopStream(); if(b.size > MAX_VIDEO){ toast('That recording is too big (limit 30 MB). Record a shorter one.'); return; } state.video = b; showMedia(); };
-        rec.start(1000); var left = MAX_SECONDS; recBtn.textContent = '⏹ Stop (' + left + 's)'; timer = setInterval(function(){ if(!document.body.contains(live)){ stopRec(); return; } left--; recBtn.textContent = '⏹ Stop (' + left + 's)'; if(left <= 0) stopRec(); }, 1000);
-      }, function(){ toast('Camera or microphone was not allowed. Use Upload video instead.'); }); }
-    function stopRec(){ try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) { stopStream(); } }
+    var facing = 'user', camOn = false, camBox = h('div', { id: 'st-cam', class: 'row', style: 'display:none;margin-top:8px;gap:8px;flex-wrap:wrap;justify-content:flex-start' });
+    var openBtn = h('button', { class: 'btn ghost', type: 'button', id: 'st-cam-open', onclick: function(){ camOn ? closeCam() : openCam(); } }, '📷 Open camera'),
+      snapBtn = h('button', { class: 'btn', type: 'button', id: 'st-snap', onclick: function(){ snap(); } }, 'Take picture'),
+      recBtn = h('button', { class: 'btn', type: 'button', id: 'st-rec', onclick: function(){ rec && rec.state === 'recording' ? stopRec() : startRec(); } }, '🎥 Record video'),
+      flipBtn = h('button', { class: 'btn ghost', type: 'button', id: 'st-flip', onclick: function(){ if(rec && rec.state === 'recording'){ toast('Stop the recording first'); return; } facing = facing === 'user' ? 'environment' : 'user'; openCam(); } }, 'Switch camera');
+    camBox.append(snapBtn, recBtn, flipBtn);
+    function setRecLabel(s){ recBtn.textContent = s ? '⏹ Stop (' + s + 's)' : '🎥 Record video'; }
+    function stopStream(){ if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; } live.srcObject = null; clearInterval(timer); setRecLabel(0); }
+    function closeCam(){ if(rec && rec.state === 'recording'){ try { rec.onstop = null; rec.stop(); } catch(e) {} } stopStream(); camOn = false; live.style.display = 'none'; camBox.style.display = 'none'; openBtn.textContent = '📷 Open camera'; }
+    function openCam(){ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('The camera is not available here. Use Add picture or Upload video.'); return; }
+      stopStream(); var vc = { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } };
+      navigator.mediaDevices.getUserMedia({ video: vc, audio: true }).catch(function(){ toast('Microphone not allowed, so videos will have no sound.'); return navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }).then(function(s){
+        stream = s; camOn = true; live.srcObject = s; live.style.display = 'block'; camBox.style.display = 'block'; live.style.transform = facing === 'user' ? 'scaleX(-1)' : 'none'; openBtn.textContent = '✕ Close camera'; live.play().catch(function(){});
+      }, function(){ toast('Camera was not allowed. Allow it in the browser or phone settings, or use Add picture or Upload video.'); }); }
+    function snap(){ if(!stream || !live.videoWidth){ toast('Open the camera first'); return; } var cv = document.createElement('canvas'), s = Math.min(1, 1280 / Math.max(live.videoWidth, live.videoHeight)); cv.width = Math.round(live.videoWidth * s); cv.height = Math.round(live.videoHeight * s); cv.getContext('2d').drawImage(live, 0, 0, cv.width, cv.height);
+      cv.toBlob(function(b){ if(!b){ toast('Could not take the picture'); return; } state.image = b; showMedia(); toast('Picture taken'); }, 'image/jpeg', 0.85); }
+    function startRec(){ if(!stream){ toast('Open the camera first'); return; } if(!window.MediaRecorder){ toast('Recording is not available here. Use Upload video instead.'); return; }
+      chunks = []; var type = videoType(), opt = { videoBitsPerSecond: 1000000, audioBitsPerSecond: 64000 }; if(type) opt.mimeType = type; rec = new MediaRecorder(stream, opt);
+      rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function(){ clearInterval(timer); setRecLabel(0); var b = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' }); if(b.size > MAX_VIDEO){ toast('That recording is too big (limit 30 MB). Record a shorter one.'); return; } state.video = b; showMedia(); toast('Video recorded'); };
+      rec.start(1000); var left = MAX_SECONDS; setRecLabel(left); timer = setInterval(function(){ if(!document.body.contains(live)){ closeCam(); return; } left--; setRecLabel(left); if(left <= 0) stopRec(); }, 1000); }
+    function stopRec(){ try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) { closeCam(); } }
 
     var postBtn = h('button', { class: 'btn block', type: 'button', id: 'st-post', onclick: function(){
       var cf = cfg(); if(!cf.token || !cf.repo){ toast('Set up publishing first (below)'); return; }
@@ -123,8 +135,8 @@ window.StudioKit = function(E){
     var pg = E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' },
       h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'),
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, body,
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, recBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
-        live, mediaNote, preview,
+        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, openBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
+        h('div', { class: 'camwrap' }, live, camBox), mediaNote, preview,
         h('label', { class: 'row', style: 'justify-content:flex-start;gap:8px;margin:10px 0', for: 'st-hc' }, hc, h('span', {}, 'Also push it to the Online Homecell')),
         postBtn, status),
       h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, 'Your posts'), list, setup));
