@@ -5,6 +5,6 @@ window.APPCFG = {
   /* the real address of the app; copies running anywhere else show a warning and the Verify check compares with this site */
   officialUrl: 'https://ashelzbible.github.io/Ashelz-Bible-App/',
   /* where the Creator Studio saves posts (the repository the official site is published from) */
-  publishRepo: 'mrandrecloete-hub/ashelz-bible-app', publishBranch: 'main',
+  publishRepo: 'ashelzbible/Ashelz-Bible-App', publishBranch: 'main',
   officialHosts: ['ashelzbible.github.io', 'ashelz-bible-app.netlify.app', 'ashlez.netlify.app']
 };

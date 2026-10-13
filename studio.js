@@ -23,7 +23,7 @@ window.StudioKit = function(E){
     p.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryIn(); });
     return E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' }, h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('account')), 'Developer sign in'), h('p', { class: 'note' }, 'This area is only for the app developer. Readers do not need to sign in to read, watch or download devotions.'), u, p, h('button', { class: 'btn block', type: 'button', id: 'dv-go', style: 'margin-top:10px', onclick: tryIn }, 'Sign in'), msg)));
   }
-  function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; if(c.repo === 'ashelzbible/Ashelz-Bible-App' && a.publishRepo) c.repo = ''; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
+  function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; if(c.repo === 'mrandrecloete-hub/ashelz-bible-app' && a.publishRepo) c.repo = ''; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
   function esc(s){ return String(s == null ? '' : s); }
   function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
 
@@ -158,7 +158,7 @@ window.StudioKit = function(E){
         derive(cu.value, cp.value).then(function(d){ if(d !== DEVC().hash){ cpm.textContent = 'The email or current password is not right.'; return; }
           var salt = crypto.getRandomValues(new Uint8Array(16)), nc = { salt: hex(salt), hash: '', iter: 250000 };
           return derive(cu.value, np.value, nc).then(function(nh){ nc.hash = nh; save(CREDKEY, nc); try { sessionStorage.setItem(SESS, nh.slice(0, 16)); } catch(e) {} cu.value = cp.value = np.value = np2.value = ''; cpm.textContent = 'Password changed on this device.'; toast('Password changed'); }); }, function(){ cpm.textContent = 'Could not change it on this device.'; }); } }, 'Change password'), cpm);
-    var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. mrandrecloete-hub/ashelz-bible-app', 'aria-label': 'Repository', autocomplete: 'off' }),
+    var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. ashelzbible/Ashelz-Bible-App', 'aria-label': 'Repository', autocomplete: 'off' }),
       br = h('input', { type: 'text', id: 'st-branch', value: c.branch, placeholder: 'main', 'aria-label': 'Branch', autocomplete: 'off' }),
       tok = h('input', { type: 'text', id: 'st-token', name: 'gh-fine-grained-token', value: c.token, placeholder: 'Paste the token here (kept on this device only)', 'aria-label': 'Token', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', style: '-webkit-text-security:disc;text-security:disc' });
     var badge = h('p', { class: 'note', id: 'st-badge', role: 'status' });
