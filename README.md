@@ -71,3 +71,5 @@ Settings, bottom button "Creator Studio (for Ashelz)". The developer can write a
 - There is no server. Posts are files in the app's GitHub repository (`posts/feed.json` and one folder per post), written with the GitHub API. The developer pastes a fine grained token (this repository only, Contents: Read and write) once; it stays on that device and is never in the app files. Without the token nobody can publish. `publishRepo` in `config.js` sets the default repository.
 - A new post can take a minute or two to appear on other phones while GitHub Pages updates.
 - Tested here against a pretend GitHub (publish, read, download, push to Homecell, delete). Publishing to the real repository still needs a first live try with her token.
+
+- Developer sign in (2.4.7): the Studio opens only after the developer email and password. The app holds only a salted PBKDF2 hash, never the password. This keeps other people out of the Studio screen; the real lock on publishing is the GitHub token on her device. The sign in lasts until the tab or app is closed, and five wrong tries slow down further tries.

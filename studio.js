@@ -4,6 +4,23 @@
 window.StudioKit = function(E){
   var h = E.h, toast = E.toast, load = E.load, save = E.save, KEY = 'woh_studio_v1', FEEDKEY = 'woh_feedcache_v1';
   var MAX_VIDEO = 30 * 1024 * 1024, MAX_SECONDS = 120, FEED = 'posts/feed.json';
+  /* Developer sign in. Only a salted PBKDF2 hash is kept here, never the password itself. This stops other people opening the Studio screen; the real lock on publishing is the GitHub token that only the developer's device holds. */
+  var DEV = { salt: '3100139f90c1c10285dde875969d5179', hash: 'd0f9b2f04e9a8d77923e4e05b6441dece4556b44538af828d4061037bcaca91e', iter: 250000 }, SESS = 'woh_studio_ok', FAILKEY = 'woh_studio_fail';
+  function hex(b){ return Array.prototype.map.call(new Uint8Array(b), function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  function unhex(s){ var o = new Uint8Array(s.length / 2); for(var i = 0; i < o.length; i++) o[i] = parseInt(s.substr(i * 2, 2), 16); return o; }
+  function derive(user, pass){ var enc = new TextEncoder(); return crypto.subtle.importKey('raw', enc.encode(user.trim().toLowerCase() + '\n' + pass), 'PBKDF2', false, ['deriveBits']).then(function(k){ return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unhex(DEV.salt), iterations: DEV.iter, hash: 'SHA-256' }, k, 256); }).then(hex); }
+  function unlocked(){ try { return sessionStorage.getItem(SESS) === DEV.hash.slice(0, 16); } catch(e) { return false; } }
+  function lockNow(){ try { sessionStorage.removeItem(SESS); } catch(e) {} }
+  function Login(go){
+    var u = h('input', { type: 'email', id: 'dv-user', placeholder: 'Developer email', autocomplete: 'username', 'aria-label': 'Developer email' }), p = h('input', { type: 'password', id: 'dv-pass', placeholder: 'Password', autocomplete: 'current-password', 'aria-label': 'Password' }), msg = h('p', { class: 'note', id: 'dv-msg', role: 'status' });
+    function tryIn(){ var f = load(FAILKEY, { n: 0, until: 0 }); if(Date.now() < f.until){ msg.textContent = 'Too many tries. Wait ' + Math.ceil((f.until - Date.now()) / 1000) + ' seconds.'; return; }
+      if(!(window.crypto && crypto.subtle)){ msg.textContent = 'Sign in needs a secure (https) connection.'; return; }
+      derive(u.value, p.value).then(function(d){ if(d === DEV.hash){ save(FAILKEY, { n: 0, until: 0 }); try { sessionStorage.setItem(SESS, DEV.hash.slice(0, 16)); } catch(e) {} p.value = ''; go('studio'); }
+        else { f.n++; f.until = f.n >= 5 ? Date.now() + Math.min(900000, 30000 * (f.n - 4)) : 0; save(FAILKEY, f); msg.textContent = 'That email or password is not right.'; p.value = ''; }
+      }, function(){ msg.textContent = 'Could not check the sign in on this device.'; }); }
+    p.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryIn(); });
+    return E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' }, h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('account')), 'Developer sign in'), h('p', { class: 'note' }, 'This area is only for the app developer. Readers do not need to sign in to read, watch or download devotions.'), u, p, h('button', { class: 'btn block', type: 'button', id: 'dv-go', style: 'margin-top:10px', onclick: tryIn }, 'Sign in'), msg)));
+  }
   function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
   function esc(s){ return String(s == null ? '' : s); }
   function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
@@ -70,6 +87,7 @@ window.StudioKit = function(E){
 
   /* ---------- the Studio page ---------- */
   function Studio(go){
+    if(!unlocked()) return Login(go);
     var state = { image: null, video: null }, stream = null, rec = null, timer = null, chunks = [];
     var c = cfg();
     var title = h('input', { type: 'text', id: 'st-title', maxlength: '90', placeholder: 'Title of today\'s devotion', 'aria-label': 'Title' }),
@@ -133,7 +151,7 @@ window.StudioKit = function(E){
         h('button', { class: 'btn ghost', type: 'button', id: 'st-forget', onclick: function(){ save(KEY, {}); tok.value = ''; toast('Token removed from this device'); } }, 'Remove token from this device')));
     drawList();
     var pg = E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' },
-      h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'),
+      h('div', { class: 'row' }, h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'), h('button', { class: 'btn ghost sm', type: 'button', id: 'dv-out', onclick: function(){ lockNow(); toast('Signed out'); go('studio'); } }, 'Sign out')),
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, body,
         h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, openBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
         h('div', { class: 'camwrap' }, live, camBox), mediaNote, preview,
