@@ -28,9 +28,12 @@ window.StudioKit = function(E){
   function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
 
   /* ---------- reading the feed (everyone) ---------- */
-  function cached(){ var c = load(FEEDKEY, null); return c && c.posts ? c.posts : []; }
+  var HIDEKEY = 'woh_feedhide_v1';
+  function hiddenIds(){ var o = load(HIDEKEY, {}), now = Date.now(), out = {}; Object.keys(o).forEach(function(k){ if(now - o[k] < 3600000) out[k] = o[k]; }); return out; }
+  function hideId(id){ var o = hiddenIds(); o[id] = Date.now(); save(HIDEKEY, o); }
+  function cached(){ var c = load(FEEDKEY, null), hid = hiddenIds(); return (c && c.posts ? c.posts : []).filter(function(p){ return !hid[p.id]; }); }
   function fetchFeed(){ return fetch(FEED + '?t=' + Date.now(), { cache: 'no-store' }).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(j){
-    var posts = (j && j.posts || []).filter(function(p){ return p && p.id && p.title; }).sort(function(a, b){ return a.id < b.id ? 1 : -1; });
+    var hid = hiddenIds(), posts = (j && j.posts || []).filter(function(p){ return p && p.id && p.title && !hid[p.id]; }).sort(function(a, b){ return a.id < b.id ? 1 : -1; });
     save(FEEDKEY, { posts: posts }); return posts; }).catch(function(){ return cached(); }); }
 
   /* ---------- saving to the phone ---------- */
@@ -55,10 +58,15 @@ window.StudioKit = function(E){
     return h('div', { class: 'card postcard', 'data-post': p.id }, kids);
   }
   /* a block for the Devotions page and one for the Homecell page; each loads its posts when it is shown */
+  /* the Delete button on the public pages: only drawn while the developer is signed in on this device */
+  function delRow(p){ var b = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', 'aria-label': 'Delete this post', onclick: function(){
+      if(!unlocked()) return; if(!cfg().token){ toast('Set up publishing in Creator Studio first'); return; } if(!confirm('Delete this post for everyone?')) return; b.disabled = true; b.textContent = 'Deleting...';
+      removePost(p).then(function(){ toast('Deleted'); var card = b.closest('.postcard'); if(card) card.remove(); }, function(e){ b.disabled = false; b.textContent = 'Delete'; toast('Could not delete: ' + e.message); }); } }, 'Delete');
+    return h('div', { class: 'row', style: 'gap:6px;justify-content:flex-start;margin-top:8px', 'data-owner': '1' }, b); }
   function Block(title, filter, note){
     var box = h('div', { class: 'stack postblock', 'data-block': title }), wrap = h('div', { class: 'stack' }, h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, title), box);
     function paint(all){ var list = all.filter(filter).slice(0, 8); box.innerHTML = ''; if(!list.length){ wrap.style.display = 'none'; return; } wrap.style.display = '';
-      if(note) box.appendChild(h('p', { class: 'note' }, note)); list.forEach(function(p){ box.appendChild(PostCard(p)); }); }
+      if(note) box.appendChild(h('p', { class: 'note' }, note)); list.forEach(function(p){ box.appendChild(PostCard(p, unlocked() ? delRow(p) : null)); }); }
     paint(cached());          /* what this phone already knows shows at once */
     fetchFeed().then(paint);  /* then the newest list replaces it */
     return wrap;
@@ -86,7 +94,7 @@ window.StudioKit = function(E){
   function publish(p, files, onStep){ var base = 'posts/' + p.id + '/', chain = Promise.resolve();
     files.forEach(function(f){ chain = chain.then(function(){ onStep('Preparing ' + f.label + '...'); return b64(f.blob).then(function(d){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) 0%'); return putFile(base + f.name, d, 'Post media: ' + p.title, '', function(pc){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) ' + pc + '%' + (pc >= 100 ? ', waiting for GitHub...' : '')); }); }); }); });
     return chain.then(function(){ onStep('Adding to the Devotions page...'); return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); d.posts.unshift(p); return d; }, 'Post: ' + p.title); }); }
-  function removePost(p){ return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); return d; }, 'Remove post: ' + p.title).then(function(){
+  function removePost(p){ return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); return d; }, 'Remove post: ' + p.title).then(function(){ hideId(p.id);
     return Promise.all(['image', 'video'].map(function(k){ if(!p[k]) return null; var path = p[k]; return api(path, { q: '?ref=' + encodeURIComponent(cfg().branch) }).then(function(j){ return api(path, { method: 'DELETE', body: JSON.stringify({ message: 'Remove post media', sha: j.sha, branch: cfg().branch }) }); }).catch(function(){}); })); }); }
   function setHomecell(p, on){ return editFeed(function(d){ d.posts.forEach(function(x){ if(x.id === p.id) x.homecell = on; }); return d; }, (on ? 'Push to Homecell: ' : 'Take off Homecell: ') + p.title); }
 
