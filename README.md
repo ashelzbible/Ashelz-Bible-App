@@ -74,3 +74,6 @@ Settings, bottom button "Creator Studio (for Ashelz)". The developer can write a
 
 - Developer sign in (2.4.7): the Studio opens only after the developer email and password. The app holds only a salted PBKDF2 hash, never the password. This keeps other people out of the Studio screen; the real lock on publishing is the GitHub token on her device. The sign in lasts until the tab or app is closed, and five wrong tries slow down further tries.
 - Change password (2.4.8): inside the Studio. The new password is kept on that device only. To change the built in one for every device run `node tools/set_dev_password.js "email" "new password"` and paste the result into DEV0 in studio.js.
+
+## All languages (2.4.27)
+Bible Translations has an **All languages** card: it loads the list of free versions from the Free Use Bible API (bible.helloao.org, no key) and lets a reader search by language or version. Chapters are read from the same service and kept on the phone. This was tested here with a pretend copy of the service in the format I expected; the first live use still needs a check. The app screens themselves are still in English. The NIV needs an API.Bible key that includes it.
