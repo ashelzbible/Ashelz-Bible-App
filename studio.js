@@ -75,12 +75,12 @@ window.StudioKit = function(E){
   /* ---------- publishing to GitHub (developer only) ---------- */
   function api(path, opt){ var c = cfg(); opt = opt || {}; opt.headers = { 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + c.token, 'X-GitHub-Api-Version': '2022-11-28' }; if(opt.body){ opt.headers['Content-Type'] = 'application/json'; }
     return fetch('https://api.github.com/repos/' + c.repo + '/contents/' + path + (opt.q || ''), opt).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(!r.ok){ var e = new Error(j.message || ('GitHub error ' + r.status)); e.status = r.status; throw e; } return j; }); }); }
-  function b64(blob){ return new Promise(function(res, rej){ var f = new FileReader(); f.onload = function(){ res(String(f.result).split(',')[1] || ''); }; f.onerror = rej; f.readAsDataURL(blob); }); }
+  function b64(blob){ return new Promise(function(res, rej){ var f = new FileReader(); f.onload = function(){ var r = String(f.result), k = r.indexOf('base64,'); res(k > -1 ? r.slice(k + 7) : ''); }; f.onerror = rej; f.readAsDataURL(blob); }); }
   function b64text(s){ return btoa(unescape(encodeURIComponent(s))); }
   function fromB64(s){ return decodeURIComponent(escape(atob(String(s).replace(/\s/g, '')))); }
   /* uploads use XMLHttpRequest so the screen can show real progress, and give up with a clear message instead of waiting for ever */
   function putFile(path, content64, message, sha, onProgress){ var c = cfg(), body = { message: message, content: content64, branch: c.branch }; if(sha) body.sha = sha;
-    return new Promise(function(res, rej){ var x = new XMLHttpRequest(); x.open('PUT', 'https://api.github.com/repos/' + c.repo + '/contents/' + path); x.timeout = 300000;
+    return new Promise(function(res, rej){ var x = new XMLHttpRequest(); x.open('PUT', 'https://api.github.com/repos/' + c.repo + '/contents/' + path); x.timeout = 600000;
       x.setRequestHeader('Accept', 'application/vnd.github+json'); x.setRequestHeader('Authorization', 'Bearer ' + c.token); x.setRequestHeader('X-GitHub-Api-Version', '2022-11-28'); x.setRequestHeader('Content-Type', 'application/json');
       if(x.upload && onProgress) x.upload.onprogress = function(e){ if(e.lengthComputable) onProgress(Math.round(e.loaded * 100 / e.total)); };
       x.onload = function(){ var j = {}; try { j = JSON.parse(x.responseText); } catch(e) {} if(x.status >= 200 && x.status < 300) res(j); else { var er = new Error(j.message || ('GitHub error ' + x.status)); er.status = x.status; rej(er); } };
@@ -103,6 +103,28 @@ window.StudioKit = function(E){
   function videoType(){ var t = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']; for(var i = 0; i < t.length; i++){ if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t[i])) return t[i]; } return ''; }
   function vext(b){ return /mp4/.test(b.type) ? 'mp4' : /quicktime/.test(b.type) ? 'mov' : /webm/.test(b.type) ? 'webm' : 'mp4'; }
 
+  /* ---------- making a long or big video small enough to post (like WhatsApp): the phone plays it and records a lighter copy ---------- */
+  var SQUEEZE_OVER = 8 * 1024 * 1024, TARGET_BYTES = 8000000, MIN_VB = 300000, MAX_VB = 900000, ABR = 64000, MAX_IN = 400 * 1024 * 1024;
+  function canSqueeze(){ return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && (window.AudioContext || window.webkitAudioContext)); }
+  function squeeze(file, onP, tk){ return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file), v = document.createElement('video'), cv = document.createElement('canvas'), cx = cv.getContext('2d'), ac, rec, chunks = [], timer, done = false, lock = null;
+    v.playsInline = true; v.preload = 'auto'; v.src = url;
+    function cleanup(){ clearInterval(timer); try { v.pause(); } catch(e) {} try { ac && ac.close(); } catch(e) {} try { lock && lock.release(); } catch(e) {} URL.revokeObjectURL(url); }
+    function fail(m){ if(done) return; done = true; cleanup(); try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) {} rej(new Error(m)); }
+    v.onerror = function(){ fail('This video format cannot be read on this phone. Try another video.'); };
+    v.onloadedmetadata = function(){ var dur = v.duration; if(!isFinite(dur) || dur <= 0 || !v.videoWidth){ fail('Could not read this video.'); return; }
+      var maxDur = Math.min(dur, TARGET_BYTES * 8 / (MIN_VB + ABR)), vb = Math.max(MIN_VB, Math.min(MAX_VB, TARGET_BYTES * 8 / maxDur - ABR)), sc = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+      cv.width = Math.max(2, Math.round(v.videoWidth * sc / 2) * 2); cv.height = Math.max(2, Math.round(v.videoHeight * sc / 2) * 2);
+      try { ac = new (window.AudioContext || window.webkitAudioContext)(); var src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);
+        var stream = cv.captureStream(24); dest.stream.getAudioTracks().forEach(function(t){ stream.addTrack(t); });
+        var type = videoType(), opt = { videoBitsPerSecond: vb, audioBitsPerSecond: ABR }; if(type) opt.mimeType = type; rec = new MediaRecorder(stream, opt);
+        rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function(){ if(done) return; done = true; cleanup(); var b = new Blob(chunks, { type: /mp4/.test(rec.mimeType || type) ? 'video/mp4' : 'video/webm' }); b.cut = maxDur < dur - 0.5; b.secs = Math.round(Math.min(maxDur, dur)); res(b); };
+        rec.start(1000); } catch(e) { fail('This phone cannot make the video smaller.'); return; }
+      try { if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ lock = l; }, function(){}); } catch(e) {}
+      v.onended = function(){ if(rec && rec.state === 'recording') rec.stop(); };
+      v.play().then(function(){ timer = setInterval(function(){ if(tk.cancel){ fail('cancelled'); return; } try { cx.drawImage(v, 0, 0, cv.width, cv.height); } catch(e) {} onP(Math.min(99, Math.round(v.currentTime * 100 / maxDur))); if(v.currentTime >= maxDur - 0.05 && rec.state === 'recording'){ clearInterval(timer); rec.stop(); } }, 42); }, function(){ fail('The phone would not play the video to make it smaller. Tap Upload video again.'); }); }; }); }
+
   /* ---------- the Studio page ---------- */
   function Studio(go){
     if(!unlocked()) return Login(go);
@@ -117,7 +139,15 @@ window.StudioKit = function(E){
       if(state.video){ preview.appendChild(h('video', { src: URL.createObjectURL(state.video), controls: true, playsinline: true, style: 'width:100%;border-radius:12px;margin-top:6px;background:#000' })); n.push('Video ' + (state.video.size / 1048576).toFixed(1) + ' MB'); }
       mediaNote.textContent = n.length ? n.join(' · ') : 'No picture or video added.'; if(window.__stReady) window.__stReady(); }
     var imgIn = h('input', { type: 'file', accept: 'image/*', id: 'st-img', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; shrinkImage(f).then(function(b){ state.image = b; showMedia(); }, function(e){ toast(e.message); }); } });
-    var vidIn = h('input', { type: 'file', accept: 'video/*', id: 'st-vid', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; if(f.size > MAX_VIDEO){ toast('That video is ' + (f.size / 1048576).toFixed(0) + ' MB. The limit is 30 MB. Record a shorter one.'); return; } state.video = f; showMedia(); } });
+    var vidIn = h('input', { type: 'file', accept: 'video/*', id: 'st-vid', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; takeVideo(f); } });
+    var working = null, cancelBtn = h('button', { class: 'btn ghost sm', type: 'button', id: 'st-cancel', style: 'display:none', onclick: function(){ if(working) working.cancel = true; } }, 'Cancel');
+    function takeVideo(f){ state.video = null; showMedia();
+      if(f.size <= SQUEEZE_OVER && !window.__squeezeAll){ if(f.size > MAX_VIDEO){ toast('That video is too big to post.'); return; } state.video = f; showMedia(); return; }
+      if(!canSqueeze()){ if(f.size > MAX_VIDEO){ toast('That video is ' + (f.size / 1048576).toFixed(0) + ' MB and this phone cannot make it smaller. The limit is 30 MB.'); return; } state.video = f; showMedia(); return; }
+      if(f.size > MAX_IN){ toast('That video is too big to open here. Choose a smaller one.'); return; }
+      var tk = { cancel: false }; working = tk; cancelBtn.style.display = ''; refreshReady(); mediaNote.textContent = 'Making the video smaller so it posts quickly... 0%. Keep the app open.';
+      squeeze(f, function(p){ mediaNote.textContent = 'Making the video smaller so it posts quickly... ' + p + '%. Keep the app open.'; }, tk).then(function(b){ working = null; cancelBtn.style.display = 'none'; state.video = b; showMedia(); refreshReady(); toast(b.cut ? 'The video was longer than can post, so it was cut to the first ' + b.secs + ' seconds' : 'The video was made smaller and is ready'); },
+        function(e){ working = null; cancelBtn.style.display = 'none'; mediaNote.textContent = 'No picture or video added.'; showMedia(); refreshReady(); if(e.message === 'cancelled'){ toast('Cancelled'); return; } if(f.size <= MAX_VIDEO){ state.video = f; showMedia(); refreshReady(); toast(e.message + ' The original video is used.'); } else toast(e.message); }); }
     var facing = 'user', camOn = false, camBox = h('div', { id: 'st-cam', class: 'row', style: 'display:none;margin-top:8px;gap:8px;flex-wrap:wrap;justify-content:flex-start' });
     var openBtn = h('button', { class: 'btn ghost', type: 'button', id: 'st-cam-open', onclick: function(){ camOn ? closeCam() : openCam(); } }, '📷 Open camera'),
       snapBtn = h('button', { class: 'btn', type: 'button', id: 'st-snap', onclick: function(){ snap(); } }, 'Take picture'),
@@ -137,7 +167,7 @@ window.StudioKit = function(E){
     function startRec(){ if(!stream){ toast('Open the camera first'); return; } if(!window.MediaRecorder){ toast('Recording is not available here. Use Upload video instead.'); return; }
       chunks = []; var type = videoType(), opt = { videoBitsPerSecond: 1000000, audioBitsPerSecond: 64000 }; if(type) opt.mimeType = type; rec = new MediaRecorder(stream, opt);
       rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
-      rec.onstop = function(){ clearInterval(timer); setRecLabel(0); setTimeout(refreshReady, 0); var b = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' }); if(b.size > MAX_VIDEO){ toast('That recording is too big (limit 30 MB). Record a shorter one.'); return; } state.video = b; showMedia(); toast('Video recorded'); };
+      rec.onstop = function(){ clearInterval(timer); setRecLabel(0); setTimeout(refreshReady, 0); var b = new Blob(chunks, { type: /mp4/.test(rec.mimeType || type) ? 'video/mp4' : 'video/webm' }); takeVideo(b); };
       rec.start(1000); refreshReady(); var left = MAX_SECONDS; setRecLabel(left); timer = setInterval(function(){ if(!document.body.contains(live)){ closeCam(); return; } left--; setRecLabel(left); if(left <= 0) stopRec(); }, 1000); }
     function stopRec(){ try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) { closeCam(); } }
 
@@ -145,6 +175,7 @@ window.StudioKit = function(E){
       var cf = persist(); if(!cf.token){ toast('The token is missing. Paste it in Publishing setup and tap Save and check.'); return; } if(!cf.repo){ toast('The repository is missing. Add it in Publishing setup.'); return; }
       var t = title.value.trim(), tx = body.value.trim(); if(!t){ toast('Add a title'); return; } if(!tx && !state.image && !state.video){ toast('Add some text, a picture or a video'); return; }
       if(rec && rec.state === 'recording'){ toast('Stop the recording first'); return; }
+      if(working){ toast('Wait for the video to finish getting smaller, or tap Cancel'); return; }
       var p = { id: newId(), title: t, ref: ref.value.trim(), body: tx, at: new Date().toISOString(), homecell: hc.checked }, files = [];
       if(state.image){ p.image = 'posts/' + p.id + '/picture.jpg'; files.push({ name: 'picture.jpg', label: 'picture', blob: state.image }); }
       if(state.video){ var vn = 'video.' + vext(state.video); p.video = 'posts/' + p.id + '/' + vn; files.push({ name: vn, label: 'video', blob: state.video }); }
@@ -153,7 +184,7 @@ window.StudioKit = function(E){
         function(e){ postBtn.disabled = false; refreshReady(); step((e.status === 401 ? 'GitHub says the token is not valid (401). It may have been copied wrong or has expired. Make a new one. ' : e.status === 403 ? 'GitHub refused (403). The token needs Contents: Read and write for this repository, and it must be made in the account that owns the repository. ' : e.status === 404 ? 'GitHub could not find the repository with this token (404). The repository name may be wrong, or the token was not made for it. ' : 'Could not post. ') + (e.message ? 'GitHub says: ' + e.message : '')); }); } }, 'Post to Devotions');
 
     /* the Post button turns green when everything needed is in place */
-    function refreshReady(){ var k = cfg(), recording = rec && rec.state === 'recording', ok = title.value.trim() && (body.value.trim() || state.image || state.video) && k.token && k.repo && !recording && !postBtn.disabled;
+    function refreshReady(){ var k = cfg(), recording = rec && rec.state === 'recording', ok = title.value.trim() && (body.value.trim() || state.image || state.video) && k.token && k.repo && !recording && !working && !postBtn.disabled;
       postBtn.classList.toggle('ready', !!ok); postBtn.textContent = ok ? '✓ Ready, Post to Devotions' : 'Post to Devotions'; }
     ['input', 'change'].forEach(function(ev){ title.addEventListener(ev, refreshReady); body.addEventListener(ev, refreshReady); });
     var list = h('div', { class: 'stack', id: 'st-list' });
@@ -185,7 +216,7 @@ window.StudioKit = function(E){
       h('div', { class: 'row' }, h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'), h('button', { class: 'btn ghost sm', type: 'button', id: 'dv-out', onclick: function(){ lockNow(); toast('Signed out'); go('studio'); } }, 'Sign out')),
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, body,
         h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, openBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
-        h('div', { class: 'camwrap' }, live, camBox), mediaNote, preview,
+        h('div', { class: 'camwrap' }, live, camBox), mediaNote, cancelBtn, preview,
         h('label', { class: 'row', style: 'justify-content:flex-start;gap:8px;margin:10px 0', for: 'st-hc' }, hc, h('span', {}, 'Also push it to the Online Homecell')),
         postBtn, badge, status),
       h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, 'Your posts'), list, pwCard, setup));
