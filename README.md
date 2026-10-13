@@ -77,3 +77,6 @@ Settings, bottom button "Creator Studio (for Ashelz)". The developer can write a
 
 ## All languages (2.4.27)
 Bible Translations has an **All languages** card: it loads the list of free versions from the Free Use Bible API (bible.helloao.org, no key) and lets a reader search by language or version. Chapters are read from the same service and kept on the phone. This was tested here with a pretend copy of the service in the format I expected; the first live use still needs a check. The app screens themselves are still in English. The NIV needs an API.Bible key that includes it.
+
+## Biblia.com versions (2.4.29)
+Bible Translations has a **More versions from Biblia.com** card. The app carries a Biblia.com (Faithlife) key in `config.js` (`bibliaKey`), so readers need no key of their own. It is a public app key: in your Biblia.com account, set the Application URL to the app address so other sites cannot reuse it. Tested here with a pretend copy of the service in the format I expected; the first live use needs a check. The NIV is not offered by Biblia.com.
