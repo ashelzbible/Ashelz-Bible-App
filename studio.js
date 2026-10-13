@@ -150,7 +150,7 @@ window.StudioKit = function(E){
         derive(cu.value, cp.value).then(function(d){ if(d !== DEVC().hash){ cpm.textContent = 'The email or current password is not right.'; return; }
           var salt = crypto.getRandomValues(new Uint8Array(16)), nc = { salt: hex(salt), hash: '', iter: 250000 };
           return derive(cu.value, np.value, nc).then(function(nh){ nc.hash = nh; save(CREDKEY, nc); try { sessionStorage.setItem(SESS, nh.slice(0, 16)); } catch(e) {} cu.value = cp.value = np.value = np2.value = ''; cpm.textContent = 'Password changed on this device.'; toast('Password changed'); }); }, function(){ cpm.textContent = 'Could not change it on this device.'; }); } }, 'Change password'), cpm);
-    var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. yourname/Ashelz-Bible-App', 'aria-label': 'Repository', autocomplete: 'off' }),
+    var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. mrandrecloete-hub/ashelz-bible-app', 'aria-label': 'Repository', autocomplete: 'off' }),
       br = h('input', { type: 'text', id: 'st-branch', value: c.branch, placeholder: 'main', 'aria-label': 'Branch', autocomplete: 'off' }),
       tok = h('input', { type: 'text', id: 'st-token', name: 'gh-fine-grained-token', value: c.token, placeholder: 'Paste the token here (kept on this device only)', 'aria-label': 'Token', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', style: '-webkit-text-security:disc;text-security:disc' });
     var badge = h('p', { class: 'note', id: 'st-badge', role: 'status' });
