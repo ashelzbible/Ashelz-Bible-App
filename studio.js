@@ -126,7 +126,7 @@ window.StudioKit = function(E){
     function stopRec(){ try { if(rec && rec.state === 'recording') rec.stop(); } catch(e) { closeCam(); } }
 
     var postBtn = h('button', { class: 'btn block', type: 'button', id: 'st-post', onclick: function(){
-      var cf = cfg(); if(!cf.token || !cf.repo){ toast('Set up publishing first (below)'); return; }
+      var cf = persist(); if(!cf.token){ toast('The token is missing. Paste it in Publishing setup and tap Save and check.'); return; } if(!cf.repo){ toast('The repository is missing. Add it in Publishing setup.'); return; }
       var t = title.value.trim(), tx = body.value.trim(); if(!t){ toast('Add a title'); return; } if(!tx && !state.image && !state.video){ toast('Add some text, a picture or a video'); return; }
       if(rec && rec.state === 'recording'){ toast('Stop the recording first'); return; }
       var p = { id: newId(), title: t, ref: ref.value.trim(), body: tx, at: new Date().toISOString(), homecell: hc.checked }, files = [];
@@ -152,19 +152,22 @@ window.StudioKit = function(E){
           return derive(cu.value, np.value, nc).then(function(nh){ nc.hash = nh; save(CREDKEY, nc); try { sessionStorage.setItem(SESS, nh.slice(0, 16)); } catch(e) {} cu.value = cp.value = np.value = np2.value = ''; cpm.textContent = 'Password changed on this device.'; toast('Password changed'); }); }, function(){ cpm.textContent = 'Could not change it on this device.'; }); } }, 'Change password'), cpm);
     var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. yourname/Ashelz-Bible-App', 'aria-label': 'Repository', autocomplete: 'off' }),
       br = h('input', { type: 'text', id: 'st-branch', value: c.branch, placeholder: 'main', 'aria-label': 'Branch', autocomplete: 'off' }),
-      tok = h('input', { type: 'password', id: 'st-token', value: c.token, placeholder: 'Fine grained token (kept on this device only)', 'aria-label': 'Token', autocomplete: 'off' });
+      tok = h('input', { type: 'text', id: 'st-token', name: 'gh-fine-grained-token', value: c.token, placeholder: 'Paste the token here (kept on this device only)', 'aria-label': 'Token', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', style: '-webkit-text-security:disc;text-security:disc' });
+    var badge = h('p', { class: 'note', id: 'st-badge', role: 'status' });
+    function showBadge(){ var k = cfg(); badge.textContent = k.token && k.repo ? 'Publishing is set up for ' + k.repo + ' (' + k.branch + '). Token saved on this device.' : 'Publishing is not set up yet: ' + (!k.repo ? 'repository missing' : 'token missing') + '. Fill in Publishing setup at the bottom and tap Save and check.'; }
+    function persist(){ var r = repo.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, ''), t = tok.value.trim().replace(/^Bearer\s+/i, ''), o = load(KEY, {}); save(KEY, { repo: r || o.repo || '', branch: br.value.trim() || o.branch || 'main', token: t || o.token || '' }); showBadge(); return cfg(); }
     var setup = h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('gear')), 'Publishing setup'),
       h('p', { class: 'note' }, 'Posts are saved as files in the app\'s GitHub repository. In GitHub: Settings, Developer settings, Fine grained tokens. Choose only this repository and give it Contents: Read and write. Paste it here once. It stays on this device only and is never put in the app files.'), repo, br, tok,
-      h('div', { class: 'row', style: 'gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:flex-start' }, h('button', { class: 'btn', type: 'button', id: 'st-save', onclick: function(){ save(KEY, { repo: repo.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), branch: br.value.trim() || 'main', token: tok.value.trim() }); toast('Saved on this device'); } }, 'Save setup'),
-        h('button', { class: 'btn ghost', type: 'button', id: 'st-forget', onclick: function(){ save(KEY, {}); tok.value = ''; toast('Token removed from this device'); } }, 'Remove token from this device')));
-    drawList();
+      h('div', { class: 'row', style: 'gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:flex-start' }, h('button', { class: 'btn', type: 'button', id: 'st-save', onclick: function(){ var k = persist(); if(!k.token){ toast('The token box is empty. Paste the token first.'); return; } if(!/^[\w.-]+\/[\w.-]+$/.test(k.repo)){ toast('Repository should look like owner/repository'); return; } toast('Saved on this device. Checking...'); fetch('https://api.github.com/repos/' + k.repo, { headers: { 'Authorization': 'Bearer ' + k.token, 'Accept': 'application/vnd.github+json' } }).then(function(r){ toast(r.ok ? 'Connected to ' + k.repo : r.status === 401 ? 'GitHub says the token is not valid' : r.status === 404 ? 'GitHub cannot find that repository with this token' : 'GitHub answered ' + r.status); }, function(){ toast('Saved, but could not reach GitHub to check'); }); } }, 'Save and check'),
+        h('button', { class: 'btn ghost', type: 'button', id: 'st-forget', onclick: function(){ save(KEY, {}); tok.value = ''; showBadge(); toast('Token removed from this device'); } }, 'Remove token from this device')));
+    drawList(); showBadge();
     var pg = E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' },
       h('div', { class: 'row' }, h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'), h('button', { class: 'btn ghost sm', type: 'button', id: 'dv-out', onclick: function(){ lockNow(); toast('Signed out'); go('studio'); } }, 'Sign out')),
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, body,
         h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, openBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
         h('div', { class: 'camwrap' }, live, camBox), mediaNote, preview,
         h('label', { class: 'row', style: 'justify-content:flex-start;gap:8px;margin:10px 0', for: 'st-hc' }, hc, h('span', {}, 'Also push it to the Online Homecell')),
-        postBtn, status),
+        postBtn, badge, status),
       h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, 'Your posts'), list, pwCard, setup));
     return pg;
   }
