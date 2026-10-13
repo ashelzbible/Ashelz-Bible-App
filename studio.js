@@ -25,16 +25,19 @@ window.StudioKit = function(E){
   }
   function cfg(){ var c = load(KEY, {}), a = window.APPCFG || {}; if(c.repo === 'ashelzbible/Ashelz-Bible-App' && a.publishRepo) c.repo = ''; return { repo: c.repo || a.publishRepo || '', branch: c.branch || a.publishBranch || 'main', token: c.token || '' }; }
   function esc(s){ return String(s == null ? '' : s); }
-  function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+  function newId(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + Math.floor(10 + Math.random() * 90); }
 
   /* ---------- reading the feed (everyone) ---------- */
   var HIDEKEY = 'woh_feedhide_v1';
   function hiddenIds(){ var o = load(HIDEKEY, {}), now = Date.now(), out = {}; Object.keys(o).forEach(function(k){ if(now - o[k] < 3600000) out[k] = o[k]; }); return out; }
   function hideId(id){ var o = hiddenIds(); o[id] = Date.now(); save(HIDEKEY, o); }
-  function cached(){ var c = load(FEEDKEY, null), hid = hiddenIds(); return (c && c.posts ? c.posts : []).filter(function(p){ return !hid[p.id]; }); }
+  var EDITKEY = 'woh_feededit_v1';
+  function pendEdits(){ var o = load(EDITKEY, {}), now = Date.now(), out = {}; Object.keys(o).forEach(function(k){ if(now - o[k].ts < 3600000) out[k] = o[k]; }); return out; }
+  function applyEdits(list){ var e = pendEdits(); return list.map(function(p){ return e[p.id] ? Object.assign({}, p, e[p.id].f) : p; }); }
+  function cached(){ var c = load(FEEDKEY, null), hid = hiddenIds(); return applyEdits((c && c.posts ? c.posts : []).filter(function(p){ return !hid[p.id]; })); }
   function fetchFeed(){ return fetch(FEED + '?t=' + Date.now(), { cache: 'no-store' }).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(j){
     var hid = hiddenIds(), posts = (j && j.posts || []).filter(function(p){ return p && p.id && p.title && !hid[p.id]; }).sort(function(a, b){ return a.id < b.id ? 1 : -1; });
-    save(FEEDKEY, { posts: posts }); return posts; }).catch(function(){ return cached(); }); }
+    save(FEEDKEY, { posts: posts }); return applyEdits(posts); }).catch(function(){ return cached(); }); }
 
   /* ---------- saving to the phone ---------- */
   function postText(p){ return p.title + (p.ref ? '\n' + p.ref : '') + '\n\n' + (p.body || '') + '\n\n— Ashelz Bible App'; }
@@ -44,7 +47,7 @@ window.StudioKit = function(E){
 
   /* ---------- how one post looks (Devotions page, Homecell page, Studio list) ---------- */
   function PostCard(p, extra){
-    var kids = [h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('play')), p.title), h('p', { class: 'note', style: 'margin-top:-4px' }, 'From Ashelz · ' + (p.at ? new Date(p.at).toDateString().slice(0, 10) : ''))];
+    var kids = [h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('play')), p.title), h('p', { class: 'note', style: 'margin-top:-4px' }, 'From Ashelz · ' + (p.at ? new Date(p.at).toDateString().slice(0, 10) : '') + (p.edited ? ' · edited' : ''))];
     if(p.ref) kids.push(h('p', { class: 'note' }, p.ref));
     if(p.video) kids.push(h('video', { class: 'postmedia', src: p.video, controls: true, playsinline: true, preload: 'metadata', 'aria-label': 'Video: ' + p.title, style: 'width:100%;max-height:420px;border-radius:12px;background:#000' }));
     if(p.image) kids.push(h('img', { class: 'postmedia', src: p.image, alt: p.title, loading: 'lazy', style: 'width:100%;border-radius:12px;display:block' }));
@@ -59,16 +62,31 @@ window.StudioKit = function(E){
   }
   /* a block for the Devotions page and one for the Homecell page; each loads its posts when it is shown */
   /* the Delete button on the public pages: only drawn while the developer is signed in on this device */
-  function delRow(p){ var b = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', 'aria-label': 'Delete this post', onclick: function(){
+  function editPost(p, f){ return editFeed(function(d){ d.posts.forEach(function(x){ if(x.id === p.id){ x.title = f.title; x.ref = f.ref; x.body = f.body; x.edited = new Date().toISOString(); } }); return d; }, 'Edit post: ' + f.title).then(function(){
+    var o = load(EDITKEY, {}); o[p.id] = { ts: Date.now(), f: { title: f.title, ref: f.ref, body: f.body, edited: new Date().toISOString() } }; save(EDITKEY, o); }); }
+  /* inline editor for the wording of a post; only reachable from the owner buttons */
+  function openEditor(p, card, redraw){
+    var t = h('input', { type: 'text', maxlength: '90', value: p.title || '', 'aria-label': 'Title', class: 'ed-title' }), r = h('input', { type: 'text', maxlength: '60', value: p.ref || '', placeholder: 'Scripture (optional)', 'aria-label': 'Scripture', class: 'ed-ref' }), b = h('textarea', { rows: '8', 'aria-label': 'Devotion text', class: 'ed-body' }), msg = h('p', { class: 'note', role: 'status' });
+    b.value = p.body || '';
+    var save1 = h('button', { class: 'btn', type: 'button', 'data-act': 'save-edit', onclick: function(){ var f = { title: t.value.trim(), ref: r.value.trim(), body: b.value.trim() }; if(!f.title){ msg.textContent = 'The title cannot be empty.'; return; } if(!f.body && !p.image && !p.video){ msg.textContent = 'Add some text.'; return; } if(!cfg().token){ msg.textContent = 'Set up publishing in Creator Studio first.'; return; }
+        save1.disabled = true; msg.textContent = 'Saving...'; editPost(p, f).then(function(){ var np = Object.assign({}, p, f, { edited: new Date().toISOString() }); toast('Saved'); redraw(np); }, function(e){ save1.disabled = false; msg.textContent = 'Could not save: ' + e.message; }); } }, 'Save changes'),
+      cancel = h('button', { class: 'btn ghost', type: 'button', 'data-act': 'cancel-edit', onclick: function(){ redraw(p); } }, 'Cancel');
+    var ed = h('div', { class: 'card postcard editing', 'data-post': p.id }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'Edit the wording'), t, r, b, h('div', { class: 'row', style: 'gap:8px;justify-content:flex-start;margin-top:8px' }, save1, cancel), msg);
+    card.replaceWith(ed); t.focus(); }
+  function delRow(p, redrawAll){ var b = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', 'aria-label': 'Delete this post', onclick: function(){
       if(!unlocked()) return; if(!cfg().token){ toast('Set up publishing in Creator Studio first'); return; } if(!confirm('Delete this post for everyone?')) return; b.disabled = true; b.textContent = 'Deleting...';
-      removePost(p).then(function(){ toast('Deleted'); var card = b.closest('.postcard'); if(card) card.remove(); }, function(e){ b.disabled = false; b.textContent = 'Delete'; toast('Could not delete: ' + e.message); }); } }, 'Delete');
-    return h('div', { class: 'row', style: 'gap:6px;justify-content:flex-start;margin-top:8px', 'data-owner': '1' }, b); }
+      removePost(p).then(function(){ toast('Deleted'); var card = b.closest('.postcard'); if(card) card.remove(); if(redrawAll) redrawAll(); }, function(e){ b.disabled = false; b.textContent = 'Delete'; toast('Could not delete: ' + e.message); }); } }, 'Delete'),
+    ed = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'edit', 'aria-label': 'Edit this post', onclick: function(){ if(!unlocked()) return; var card = b.closest('.postcard');
+      openEditor(p, card, function(np){ var nc = PostCard(np, delRow(np, redrawAll)); var cur = document.querySelector('.postcard.editing[data-post="' + p.id + '"]'); if(cur) cur.replaceWith(nc); if(redrawAll) redrawAll(); }); } }, 'Edit');
+    return h('div', { class: 'row', style: 'gap:6px;justify-content:flex-start;margin-top:8px', 'data-owner': '1' }, ed, b); }
   function Block(title, filter, note){
     var box = h('div', { class: 'stack postblock', 'data-block': title }), wrap = h('div', { class: 'stack' }, h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, title), box);
-    function paint(all){ var list = all.filter(filter).slice(0, 8); box.innerHTML = ''; if(!list.length){ wrap.style.display = 'none'; return; } wrap.style.display = '';
-      if(note) box.appendChild(h('p', { class: 'note' }, note)); list.forEach(function(p){ box.appendChild(PostCard(p, unlocked() ? delRow(p) : null)); }); }
+    var showAll = false;
+    function paint(all){ var full = all.filter(filter), list = showAll ? full : full.slice(0, 5); box.innerHTML = ''; if(!full.length){ wrap.style.display = 'none'; return; } wrap.style.display = '';
+      if(note) box.appendChild(h('p', { class: 'note' }, note)); list.forEach(function(p){ box.appendChild(PostCard(p, unlocked() ? delRow(p) : null)); });
+      if(full.length > 5) box.appendChild(h('button', { class: 'btn ghost block', type: 'button', 'data-act': 'older', onclick: function(){ showAll = !showAll; paint(all); } }, showAll ? 'Show fewer posts' : 'Show older posts (' + (full.length - 5) + ')')); }
     paint(cached());          /* what this phone already knows shows at once */
-    fetchFeed().then(paint);  /* then the newest list replaces it */
+    fetchFeed().then(function(all){ paint(all); });  /* then the newest list replaces it */
     return wrap;
   }
 
@@ -193,7 +211,7 @@ window.StudioKit = function(E){
         all.forEach(function(p){ var hcb = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'homecell', onclick: function(){ var cf = cfg(); if(!cf.token){ toast('Set up publishing first'); return; } var on = !p.homecell; hcb.disabled = true; setHomecell(p, on).then(function(){ p.homecell = on; toast(on ? 'Pushed to the Homecell' : 'Taken off the Homecell'); drawList(); }, function(e){ hcb.disabled = false; toast('Could not change it: ' + e.message); }); } }, p.homecell ? '✓ In Homecell (tap to remove)' : 'Push to Homecell'),
           invB = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'invite', onclick: function(){ E.share('New from Ashelz: ' + p.title + '\nOpen the Ashelz Bible App, Devotions page, to read and watch it.'); } }, 'Invite the group'),
           delB = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', onclick: function(){ if(!cfg().token){ toast('Set up publishing first'); return; } if(!confirm('Delete this post for everyone?')) return; delB.disabled = true; removePost(p).then(function(){ toast('Deleted'); drawList(); }, function(e){ delB.disabled = false; toast('Could not delete: ' + e.message); }); } }, 'Delete');
-          list.appendChild(PostCard(p, h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, hcb, invB, delB))); }); }); }
+          list.appendChild(PostCard(p, h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, hcb, invB, h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'edit', onclick: function(){ var card = this.closest('.postcard'); openEditor(p, card, function(np){ drawList(); }); } }, 'Edit'), delB))); }); }); }
 
     var cu = h('input', { type: 'email', id: 'cp-user', placeholder: 'Developer email', autocomplete: 'username', 'aria-label': 'Developer email' }), cp = h('input', { type: 'password', id: 'cp-old', placeholder: 'Current password', autocomplete: 'current-password', 'aria-label': 'Current password' }), np = h('input', { type: 'password', id: 'cp-new', placeholder: 'New password (at least 10 characters)', autocomplete: 'new-password', 'aria-label': 'New password' }), np2 = h('input', { type: 'password', id: 'cp-new2', placeholder: 'Type the new password again', autocomplete: 'new-password', 'aria-label': 'New password again' }), cpm = h('p', { class: 'note', id: 'cp-msg', role: 'status' });
     var pwCard = h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('shield')), 'Change password'), h('p', { class: 'note' }, 'The new password is saved on this device only, as a salted hash. On a different phone or computer the older password still opens the Studio screen until the app files are updated. Publishing always needs the GitHub token.'), cu, cp, np, np2,
