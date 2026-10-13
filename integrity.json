@@ -2,7 +2,7 @@
  "app": "Ashelz Bible App",
  "version": "2.4.17",
  "built": "2026-10-13",
- "fingerprint": "3bf6a51439a632f3caa5d015aba36acf4edfd1c41d3e22c5cf74dd871092984c",
+ "fingerprint": "4a5e6cc6127540f77c278008e5846ee8bf9a60f2640b2af92ca88f403cfa1f35",
  "files": {
   "app.js": "e7f3df976369e7e7b17e5667ac3f3d16e2d04c5226c09822b72567d433141204",
   "apple-touch-icon.png": "df336ecdf88a95e1ca6ce834b07033db8a3db560f6ecd728aa4aae8e402bfc86",
@@ -239,6 +239,8 @@
   "logo.png": "57cfc8922d77871137c26c6f3f9a0f178824e0e127f72f226467798cc914db98",
   "manifest.webmanifest": "923022274e89409feda596dfce6c63b8c31044fe4273e28b7bc33561a3137734",
   "mockData.js": "d5dc42eb565caf2e58da4a26cfac37ee20162048772a16e2594da262c51dd740",
+  "posts/20261013-225346/picture.jpg": "f0efe9bc1f1792477150ceb866f7572d5427d08b72ceae9caa036cf0ab581796",
+  "posts/feed.json": "b2ae8aac7fe58782a8867aabc2fd2214c61803d89852201e537557cced8c1e37",
   "scenes.js": "ec06d4df5fb97e1c159d08173cdbe8c51bcb8f8cfd3bc9a0b4f3b66f3e5bade3",
   "studio.js": "d374e51ea7b48a0a65c5e5298f9bda817d96d79d196e8f6ccfc91f44671575b4",
   "styles.css": "70fa5a5b76fc5c1a2f6106ab6e0c17a7f4ecda01fa627f5612d527597845fb47",
