@@ -5,17 +5,19 @@ window.StudioKit = function(E){
   var h = E.h, toast = E.toast, load = E.load, save = E.save, KEY = 'woh_studio_v1', FEEDKEY = 'woh_feedcache_v1';
   var MAX_VIDEO = 30 * 1024 * 1024, MAX_SECONDS = 120, FEED = 'posts/feed.json';
   /* Developer sign in. Only a salted PBKDF2 hash is kept here, never the password itself. This stops other people opening the Studio screen; the real lock on publishing is the GitHub token that only the developer's device holds. */
-  var DEV = { salt: '3100139f90c1c10285dde875969d5179', hash: 'd0f9b2f04e9a8d77923e4e05b6441dece4556b44538af828d4061037bcaca91e', iter: 250000 }, SESS = 'woh_studio_ok', FAILKEY = 'woh_studio_fail';
+  var DEV0 = { salt: '3100139f90c1c10285dde875969d5179', hash: 'd0f9b2f04e9a8d77923e4e05b6441dece4556b44538af828d4061037bcaca91e', iter: 250000 }, SESS = 'woh_studio_ok', FAILKEY = 'woh_studio_fail';
+  var CREDKEY = 'woh_studio_cred';
+  function DEVC(){ var o = load(CREDKEY, null); return o && o.salt && o.hash ? o : DEV0; }
   function hex(b){ return Array.prototype.map.call(new Uint8Array(b), function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }
   function unhex(s){ var o = new Uint8Array(s.length / 2); for(var i = 0; i < o.length; i++) o[i] = parseInt(s.substr(i * 2, 2), 16); return o; }
-  function derive(user, pass){ var enc = new TextEncoder(); return crypto.subtle.importKey('raw', enc.encode(user.trim().toLowerCase() + '\n' + pass), 'PBKDF2', false, ['deriveBits']).then(function(k){ return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unhex(DEV.salt), iterations: DEV.iter, hash: 'SHA-256' }, k, 256); }).then(hex); }
-  function unlocked(){ try { return sessionStorage.getItem(SESS) === DEV.hash.slice(0, 16); } catch(e) { return false; } }
+  function derive(user, pass, c0){ c0 = c0 || DEVC(); var enc = new TextEncoder(); return crypto.subtle.importKey('raw', enc.encode(user.trim().toLowerCase() + '\n' + pass), 'PBKDF2', false, ['deriveBits']).then(function(k){ return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unhex(c0.salt), iterations: c0.iter, hash: 'SHA-256' }, k, 256); }).then(hex); }
+  function unlocked(){ try { return sessionStorage.getItem(SESS) === DEVC().hash.slice(0, 16); } catch(e) { return false; } }
   function lockNow(){ try { sessionStorage.removeItem(SESS); } catch(e) {} }
   function Login(go){
     var u = h('input', { type: 'email', id: 'dv-user', placeholder: 'Developer email', autocomplete: 'username', 'aria-label': 'Developer email' }), p = h('input', { type: 'password', id: 'dv-pass', placeholder: 'Password', autocomplete: 'current-password', 'aria-label': 'Password' }), msg = h('p', { class: 'note', id: 'dv-msg', role: 'status' });
     function tryIn(){ var f = load(FAILKEY, { n: 0, until: 0 }); if(Date.now() < f.until){ msg.textContent = 'Too many tries. Wait ' + Math.ceil((f.until - Date.now()) / 1000) + ' seconds.'; return; }
       if(!(window.crypto && crypto.subtle)){ msg.textContent = 'Sign in needs a secure (https) connection.'; return; }
-      derive(u.value, p.value).then(function(d){ if(d === DEV.hash){ save(FAILKEY, { n: 0, until: 0 }); try { sessionStorage.setItem(SESS, DEV.hash.slice(0, 16)); } catch(e) {} p.value = ''; go('studio'); }
+      derive(u.value, p.value).then(function(d){ if(d === DEVC().hash){ save(FAILKEY, { n: 0, until: 0 }); try { sessionStorage.setItem(SESS, DEVC().hash.slice(0, 16)); } catch(e) {} p.value = ''; go('studio'); }
         else { f.n++; f.until = f.n >= 5 ? Date.now() + Math.min(900000, 30000 * (f.n - 4)) : 0; save(FAILKEY, f); msg.textContent = 'That email or password is not right.'; p.value = ''; }
       }, function(){ msg.textContent = 'Could not check the sign in on this device.'; }); }
     p.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryIn(); });
@@ -142,6 +144,12 @@ window.StudioKit = function(E){
           delB = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', onclick: function(){ if(!cfg().token){ toast('Set up publishing first'); return; } if(!confirm('Delete this post for everyone?')) return; delB.disabled = true; removePost(p).then(function(){ toast('Deleted'); drawList(); }, function(e){ delB.disabled = false; toast('Could not delete: ' + e.message); }); } }, 'Delete');
           list.appendChild(PostCard(p, h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, hcb, invB, delB))); }); }); }
 
+    var cu = h('input', { type: 'email', id: 'cp-user', placeholder: 'Developer email', autocomplete: 'username', 'aria-label': 'Developer email' }), cp = h('input', { type: 'password', id: 'cp-old', placeholder: 'Current password', autocomplete: 'current-password', 'aria-label': 'Current password' }), np = h('input', { type: 'password', id: 'cp-new', placeholder: 'New password (at least 10 characters)', autocomplete: 'new-password', 'aria-label': 'New password' }), np2 = h('input', { type: 'password', id: 'cp-new2', placeholder: 'Type the new password again', autocomplete: 'new-password', 'aria-label': 'New password again' }), cpm = h('p', { class: 'note', id: 'cp-msg', role: 'status' });
+    var pwCard = h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('shield')), 'Change password'), h('p', { class: 'note' }, 'The new password is saved on this device only, as a salted hash. On a different phone or computer the older password still opens the Studio screen until the app files are updated. Publishing always needs the GitHub token.'), cu, cp, np, np2,
+      h('button', { class: 'btn', type: 'button', id: 'cp-go', style: 'margin-top:8px', onclick: function(){ if(np.value.length < 10){ cpm.textContent = 'Use at least 10 characters.'; return; } if(np.value !== np2.value){ cpm.textContent = 'The two new passwords are not the same.'; return; } if(np.value === cp.value){ cpm.textContent = 'Choose a password that is different from the current one.'; return; }
+        derive(cu.value, cp.value).then(function(d){ if(d !== DEVC().hash){ cpm.textContent = 'The email or current password is not right.'; return; }
+          var salt = crypto.getRandomValues(new Uint8Array(16)), nc = { salt: hex(salt), hash: '', iter: 250000 };
+          return derive(cu.value, np.value, nc).then(function(nh){ nc.hash = nh; save(CREDKEY, nc); try { sessionStorage.setItem(SESS, nh.slice(0, 16)); } catch(e) {} cu.value = cp.value = np.value = np2.value = ''; cpm.textContent = 'Password changed on this device.'; toast('Password changed'); }); }, function(){ cpm.textContent = 'Could not change it on this device.'; }); } }, 'Change password'), cpm);
     var repo = h('input', { type: 'text', id: 'st-repo', value: c.repo, placeholder: 'owner/repository, e.g. yourname/Ashelz-Bible-App', 'aria-label': 'Repository', autocomplete: 'off' }),
       br = h('input', { type: 'text', id: 'st-branch', value: c.branch, placeholder: 'main', 'aria-label': 'Branch', autocomplete: 'off' }),
       tok = h('input', { type: 'password', id: 'st-token', value: c.token, placeholder: 'Fine grained token (kept on this device only)', 'aria-label': 'Token', autocomplete: 'off' });
@@ -157,7 +165,7 @@ window.StudioKit = function(E){
         h('div', { class: 'camwrap' }, live, camBox), mediaNote, preview,
         h('label', { class: 'row', style: 'justify-content:flex-start;gap:8px;margin:10px 0', for: 'st-hc' }, hc, h('span', {}, 'Also push it to the Online Homecell')),
         postBtn, status),
-      h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, 'Your posts'), list, setup));
+      h('h2', { style: 'font-size:1.1rem;margin:4px 0 0' }, 'Your posts'), list, pwCard, setup));
     return pg;
   }
   return { Studio: Studio, Block: Block, fetchFeed: fetchFeed, PostCard: PostCard };

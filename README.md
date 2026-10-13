@@ -73,3 +73,4 @@ Settings, bottom button "Creator Studio (for Ashelz)". The developer can write a
 - Tested here against a pretend GitHub (publish, read, download, push to Homecell, delete). Publishing to the real repository still needs a first live try with her token.
 
 - Developer sign in (2.4.7): the Studio opens only after the developer email and password. The app holds only a salted PBKDF2 hash, never the password. This keeps other people out of the Studio screen; the real lock on publishing is the GitHub token on her device. The sign in lasts until the tab or app is closed, and five wrong tries slow down further tries.
+- Change password (2.4.8): inside the Studio. The new password is kept on that device only. To change the built in one for every device run `node tools/set_dev_password.js "email" "new password"` and paste the result into DEV0 in studio.js.
