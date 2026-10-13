@@ -379,3 +379,20 @@ img.i3{filter:saturate(1.2) contrast(1.06) drop-shadow(0 3px 4px rgba(10,31,77,.
 @media(min-width:960px){.hero .greet .g2{display:inline;color:#f6c453}}
 .btn.ready{background:linear-gradient(135deg,#22b455,#0d7d36)!important;box-shadow:0 4px 14px rgba(34,180,85,.5)!important;color:#fff!important}
 @media(max-width:959px){.dash .vcard{min-height:0}}
+
+/* About the Founder (2.4.20): copy of the supplied design, no lines beside the heading */
+.founder.fnew{padding:0 0 70px;position:relative;overflow:hidden;background:linear-gradient(180deg,#0b2d86,#0a2166 55%,#071a4f);border:1px solid rgba(244,195,111,.6);text-align:center}
+.fnew .fband{position:relative;height:190px;overflow:hidden}.fnew .fband>svg{position:absolute;inset:0;width:100%;height:100%}.fnew .fband::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,26,79,0) 40%,#0b2d86)}
+.fnew .fin{position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center}.fnew .flogo{position:absolute;left:10px;top:12px;width:86px;height:86px;object-fit:contain}
+.fnew .fphoto{width:128px;height:128px;border-radius:50%;object-fit:cover;border:4px solid #f4c36f;box-shadow:0 0 0 3px rgba(244,195,111,.3),0 8px 24px rgba(0,0,0,.45);margin:0}
+.fnew .ftitle{font-size:1.9rem;font-weight:700;margin:6px 0 12px;color:#fff}.fnew .ftitle .script{color:#f6c453;font-size:2.3rem;font-weight:400;padding-left:4px}
+.fnew .fglass{margin:0 14px;padding:14px 12px 10px;border-radius:16px;border:1px solid rgba(120,170,255,.45);background:rgba(20,70,170,.35);box-shadow:inset 0 0 18px rgba(80,140,255,.25)}
+.fnew .fl1{font-weight:600;margin:0 0 6px}.fnew .fl1 b{color:#f6c453}.fnew .fl2{margin:0;opacity:.95}.fnew .fdiv{margin-top:12px}.fnew .fdiv svg{width:100%;max-width:300px;height:16px}
+.fnew .fquote2{position:relative;margin:14px 14px 0;padding:14px 16px 12px 52px;text-align:left;border-radius:16px;border:1px solid rgba(120,170,255,.45);border-left:4px solid #f4c36f;background:rgba(20,70,170,.4);font-style:italic;font-size:1.2rem;line-height:1.35}
+.fnew .fquote2 .fq{position:absolute;left:12px;top:-2px;font-size:3.6rem;line-height:1;color:#f6c453;font-style:normal}.fnew .fquote2 p{margin:0 0 8px;text-align:left}.fnew .fquote2 .fgold{color:#f6c453}
+.fnew .fquote2 footer{text-align:right;color:#f6c453;font-size:1.7rem;margin-top:2px}
+.fnew .fsig{font-size:2.1rem;color:#f6c453;margin:14px 10px 4px;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.4)}
+.fnew .fpills{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;margin:12px 14px 0;padding:10px 12px;border-radius:999px;border:1px solid rgba(120,170,255,.5);background:rgba(20,70,170,.35);font-size:.85rem;font-weight:600}
+.fnew .fpill{display:inline-flex;align-items:center;gap:6px}.fnew .fpill i{display:inline-flex;width:22px;height:22px}.fnew .fpill svg{width:22px;height:22px}
+.fnew .fbk{position:absolute;left:0;right:0;bottom:-6px;pointer-events:none}.fnew .fbk svg{width:100%;height:64px;display:block}
+.fnew .fpills{flex-wrap:nowrap;gap:4px 8px;padding:10px 8px;font-size:.7rem;white-space:nowrap}.fnew .fpill{gap:3px}.fnew .fpill i,.fnew .fpill svg{width:17px;height:17px}.fnew .fsig{font-size:1.85rem}
