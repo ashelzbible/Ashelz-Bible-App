@@ -46,14 +46,15 @@ window.StudioKit = function(E){
   function ext(u){ var m = /\.([a-z0-9]{2,4})(?:\?|$)/i.exec(u); return m ? m[1] : 'bin'; }
 
   /* ---------- how one post looks (Devotions page, Homecell page, Studio list) ---------- */
+  function postImages(p){ return (p.images && p.images.length ? p.images : (p.image ? [p.image] : [])); }
   function PostCard(p, extra){
     var kids = [h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('play')), p.title), h('p', { class: 'note', style: 'margin-top:-4px' }, 'From Ashelz · ' + (p.at ? new Date(p.at).toDateString().slice(0, 10) : '') + (p.edited ? ' · edited' : ''))];
     if(p.ref) kids.push(h('p', { class: 'note' }, p.ref));
     if(p.video) kids.push(h('video', { class: 'postmedia', src: p.video, controls: true, playsinline: true, preload: 'metadata', 'aria-label': 'Video: ' + p.title, style: 'width:100%;max-height:420px;border-radius:12px;background:#000' }));
-    if(p.image) kids.push(h('img', { class: 'postmedia', src: p.image, alt: p.title, loading: 'lazy', style: 'width:100%;border-radius:12px;display:block' }));
-    if(p.body) kids.push(h('p', { class: 'selectable', style: 'white-space:pre-wrap;margin-top:8px' }, p.body));
+    var imgs = postImages(p); if(imgs.length) kids.push(h('div', { class: 'postgallery g' + Math.min(imgs.length, 4) }, imgs.map(function(u){ return h('img', { class: 'postmedia', src: u, alt: p.title, loading: 'lazy' }); })));
+    if(p.body) kids.push(h('p', { class: 'selectable', style: 'margin-top:8px;' + (window.CreatorTools ? CreatorTools.styleCss(p.style) : 'white-space:pre-wrap') }, p.body));
     var row = [h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'text', onclick: function(){ E.saveBlob(new Blob([postText(p)], { type: 'text/plain' }), 'ashelz-' + p.id + '.txt'); toast('Text downloaded'); } }, 'Download text')];
-    if(p.image) row.push(h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'image', onclick: function(){ download(p.image, 'ashelz-' + p.id + '.' + ext(p.image)); } }, 'Download image'));
+    imgs.forEach(function(u, k){ row.push(h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'image', onclick: function(){ download(u, 'ashelz-' + p.id + (imgs.length > 1 ? '-' + (k + 1) : '') + '.' + ext(u)); } }, imgs.length > 1 ? 'Download picture ' + (k + 1) : 'Download image')); });
     if(p.video) row.push(h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'video', onclick: function(){ download(p.video, 'ashelz-' + p.id + '.' + ext(p.video)); } }, 'Download video'));
     row.push(h('button', { class: 'btn ghost sm', type: 'button', onclick: function(){ E.share(postText(p)); } }, 'Share'));
     kids.push(h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:10px' }, row));
@@ -62,16 +63,16 @@ window.StudioKit = function(E){
   }
   /* a block for the Devotions page and one for the Homecell page; each loads its posts when it is shown */
   /* the Delete button on the public pages: only drawn while the developer is signed in on this device */
-  function editPost(p, f){ return editFeed(function(d){ d.posts.forEach(function(x){ if(x.id === p.id){ x.title = f.title; x.ref = f.ref; x.body = f.body; x.edited = new Date().toISOString(); } }); return d; }, 'Edit post: ' + f.title).then(function(){
-    var o = load(EDITKEY, {}); o[p.id] = { ts: Date.now(), f: { title: f.title, ref: f.ref, body: f.body, edited: new Date().toISOString() } }; save(EDITKEY, o); }); }
+  function editPost(p, f){ return editFeed(function(d){ d.posts.forEach(function(x){ if(x.id === p.id){ x.title = f.title; x.ref = f.ref; x.body = f.body; if(f.style) x.style = f.style; else delete x.style; x.edited = new Date().toISOString(); } }); return d; }, 'Edit post: ' + f.title).then(function(){
+    var o = load(EDITKEY, {}); o[p.id] = { ts: Date.now(), f: { title: f.title, ref: f.ref, body: f.body, style: f.style || undefined, edited: new Date().toISOString() } }; save(EDITKEY, o); }); }
   /* inline editor for the wording of a post; only reachable from the owner buttons */
   function openEditor(p, card, redraw){
     var t = h('input', { type: 'text', maxlength: '90', value: p.title || '', 'aria-label': 'Title', class: 'ed-title' }), r = h('input', { type: 'text', maxlength: '60', value: p.ref || '', placeholder: 'Scripture (optional)', 'aria-label': 'Scripture', class: 'ed-ref' }), b = h('textarea', { rows: '8', 'aria-label': 'Devotion text', class: 'ed-body' }), msg = h('p', { class: 'note', role: 'status' });
-    b.value = p.body || '';
-    var save1 = h('button', { class: 'btn', type: 'button', 'data-act': 'save-edit', onclick: function(){ var f = { title: t.value.trim(), ref: r.value.trim(), body: b.value.trim() }; if(!f.title){ msg.textContent = 'The title cannot be empty.'; return; } if(!f.body && !p.image && !p.video){ msg.textContent = 'Add some text.'; return; } if(!cfg().token){ msg.textContent = 'Set up publishing in Creator Studio first.'; return; }
+    b.value = p.body || ''; var st = Object.assign({ f: 'classic', s: 'm', b: 0, i: 0, a: 'left', c: '' }, p.style || {}), sbar = CreatorTools.styleBar(h, b, st);
+    var save1 = h('button', { class: 'btn', type: 'button', 'data-act': 'save-edit', onclick: function(){ var f = { title: t.value.trim(), ref: r.value.trim(), body: b.value.trim(), style: CreatorTools.isPlain(st) ? null : st }; if(!f.title){ msg.textContent = 'The title cannot be empty.'; return; } if(!f.body && !p.image && !p.video){ msg.textContent = 'Add some text.'; return; } if(!cfg().token){ msg.textContent = 'Set up publishing in Creator Studio first.'; return; }
         save1.disabled = true; msg.textContent = 'Saving...'; editPost(p, f).then(function(){ var np = Object.assign({}, p, f, { edited: new Date().toISOString() }); toast('Saved'); redraw(np); }, function(e){ save1.disabled = false; msg.textContent = 'Could not save: ' + e.message; }); } }, 'Save changes'),
       cancel = h('button', { class: 'btn ghost', type: 'button', 'data-act': 'cancel-edit', onclick: function(){ redraw(p); } }, 'Cancel');
-    var ed = h('div', { class: 'card postcard editing', 'data-post': p.id }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'Edit the wording'), t, r, b, h('div', { class: 'row', style: 'gap:8px;justify-content:flex-start;margin-top:8px' }, save1, cancel), msg);
+    var ed = h('div', { class: 'card postcard editing', 'data-post': p.id }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'Edit the wording'), t, r, sbar, b, h('div', { class: 'row', style: 'gap:8px;justify-content:flex-start;margin-top:8px' }, save1, cancel), msg);
     card.replaceWith(ed); t.focus(); }
   function delRow(p, redrawAll){ var b = h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'delete', 'aria-label': 'Delete this post', onclick: function(){
       if(!unlocked()) return; if(!cfg().token){ toast('Set up publishing in Creator Studio first'); return; } if(!confirm('Delete this post for everyone?')) return; b.disabled = true; b.textContent = 'Deleting...';
@@ -113,7 +114,7 @@ window.StudioKit = function(E){
     files.forEach(function(f){ chain = chain.then(function(){ onStep('Preparing ' + f.label + '...'); return b64(f.blob).then(function(d){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) 0%'); return putFile(base + f.name, d, 'Post media: ' + p.title, '', function(pc){ onStep('Uploading ' + f.label + ' (' + (f.blob.size / 1048576).toFixed(1) + ' MB) ' + pc + '%' + (pc >= 100 ? ', waiting for GitHub...' : '')); }); }); }); });
     return chain.then(function(){ onStep('Adding to the Devotions page...'); return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); d.posts.unshift(p); return d; }, 'Post: ' + p.title); }); }
   function removePost(p){ return editFeed(function(d){ d.posts = d.posts.filter(function(x){ return x.id !== p.id; }); return d; }, 'Remove post: ' + p.title).then(function(){ hideId(p.id);
-    return Promise.all(['image', 'video'].map(function(k){ if(!p[k]) return null; var path = p[k]; return api(path, { q: '?ref=' + encodeURIComponent(cfg().branch) }).then(function(j){ return api(path, { method: 'DELETE', body: JSON.stringify({ message: 'Remove post media', sha: j.sha, branch: cfg().branch }) }); }).catch(function(){}); })); }); }
+    var paths = postImages(p).concat(p.video ? [p.video] : []).filter(function(x, i, a){ return a.indexOf(x) === i; }); return Promise.all(paths.map(function(path){ return api(path, { q: '?ref=' + encodeURIComponent(cfg().branch) }).then(function(j){ return api(path, { method: 'DELETE', body: JSON.stringify({ message: 'Remove post media', sha: j.sha, branch: cfg().branch }) }); }).catch(function(){}); })); }); }
   function setHomecell(p, on){ return editFeed(function(d){ d.posts.forEach(function(x){ if(x.id === p.id) x.homecell = on; }); return d; }, (on ? 'Push to Homecell: ' : 'Take off Homecell: ') + p.title); }
 
   /* ---------- picture and video preparation ---------- */
@@ -145,17 +146,20 @@ window.StudioKit = function(E){
   /* ---------- the Studio page ---------- */
   function Studio(go){
     if(!unlocked()) return Login(go);
-    var state = { image: null, video: null }, stream = null, rec = null, timer = null, chunks = [];
+    var MAXPIC = 6, state = { images: [], video: null, style: { f: 'classic', s: 'm', b: 0, i: 0, a: 'left', c: '' } }, stream = null, rec = null, timer = null, chunks = [];
     var c = cfg();
     var title = h('input', { type: 'text', id: 'st-title', maxlength: '90', placeholder: 'Title of today\'s devotion', 'aria-label': 'Title' }),
       ref = h('input', { type: 'text', id: 'st-ref', maxlength: '60', placeholder: 'Scripture (optional), e.g. John 3:16', 'aria-label': 'Scripture' }),
       body = h('textarea', { id: 'st-body', rows: '8', placeholder: 'Type your devotion here', 'aria-label': 'Devotion text' }),
       hc = h('input', { type: 'checkbox', id: 'st-hc' }), status = h('p', { class: 'note', id: 'st-status', role: 'status' }), mediaNote = h('p', { class: 'note', id: 'st-media' }, 'No picture or video added.');
     var preview = h('div', { id: 'st-preview', style: 'margin-top:8px' }), live = h('video', { id: 'st-live', muted: true, playsinline: true, style: 'width:100%;border-radius:12px;background:#000;display:none' });
-    function showMedia(){ preview.innerHTML = ''; var n = []; if(state.image){ preview.appendChild(h('img', { src: URL.createObjectURL(state.image), alt: 'Picture to post', style: 'width:100%;border-radius:12px;margin-top:6px' })); n.push('Picture ' + Math.round(state.image.size / 1024) + ' KB'); }
+    function showMedia(){ preview.innerHTML = ''; var n = [];
+      if(state.images.length){ var grid = h('div', { class: 'thumbs', id: 'st-thumbs' }); state.images.forEach(function(b, k){ var u = URL.createObjectURL(b);
+          grid.appendChild(h('div', { class: 'thumb' }, h('img', { src: u, alt: 'Picture ' + (k + 1) + ' to post' }), h('div', { class: 'row', style: 'gap:4px;justify-content:center;margin-top:4px' }, h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'edit-pic', onclick: function(){ CreatorTools.openPicStudio(h, b, function(nb){ state.images[k] = nb; showMedia(); }, toast); } }, 'Edit'), h('button', { class: 'btn ghost sm', type: 'button', 'data-act': 'remove-pic', onclick: function(){ state.images.splice(k, 1); showMedia(); } }, 'Remove')))); });
+        preview.appendChild(grid); n.push(state.images.length + (state.images.length > 1 ? ' pictures' : ' picture') + ' ' + Math.round(state.images.reduce(function(a, b){ return a + b.size; }, 0) / 1024) + ' KB'); }
       if(state.video){ preview.appendChild(h('video', { src: URL.createObjectURL(state.video), controls: true, playsinline: true, style: 'width:100%;border-radius:12px;margin-top:6px;background:#000' })); n.push('Video ' + (state.video.size / 1048576).toFixed(1) + ' MB'); }
       mediaNote.textContent = n.length ? n.join(' · ') : 'No picture or video added.'; if(window.__stReady) window.__stReady(); }
-    var imgIn = h('input', { type: 'file', accept: 'image/*', id: 'st-img', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; shrinkImage(f).then(function(b){ state.image = b; showMedia(); }, function(e){ toast(e.message); }); } });
+    var imgIn = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'st-img', style: 'display:none', onchange: function(){ var fl = Array.prototype.slice.call(this.files || []); this.value = ''; if(!fl.length) return; var room = MAXPIC - state.images.length; if(fl.length > room){ toast('Up to ' + MAXPIC + ' pictures in one post'); fl = fl.slice(0, Math.max(0, room)); } Promise.all(fl.map(shrinkImage)).then(function(bs){ bs.forEach(function(b){ state.images.push(b); }); showMedia(); }, function(e){ toast(e.message); }); } });
     var vidIn = h('input', { type: 'file', accept: 'video/*', id: 'st-vid', style: 'display:none', onchange: function(){ var f = this.files[0]; this.value = ''; if(!f) return; takeVideo(f); } });
     var working = null, cancelBtn = h('button', { class: 'btn ghost sm', type: 'button', id: 'st-cancel', style: 'display:none', onclick: function(){ if(working) working.cancel = true; } }, 'Cancel');
     function takeVideo(f){ state.video = null; showMedia();
@@ -181,7 +185,7 @@ window.StudioKit = function(E){
         stream = s; camOn = true; live.srcObject = s; live.style.display = 'block'; camBox.style.display = 'block'; live.style.transform = facing === 'user' ? 'scaleX(-1)' : 'none'; openBtn.textContent = '✕ Close camera'; live.play().catch(function(){});
       }, function(){ toast('Camera was not allowed. Allow it in the browser or phone settings, or use Add picture or Upload video.'); }); }
     function snap(){ if(!stream || !live.videoWidth){ toast('Open the camera first'); return; } var cv = document.createElement('canvas'), s = Math.min(1, 1280 / Math.max(live.videoWidth, live.videoHeight)); cv.width = Math.round(live.videoWidth * s); cv.height = Math.round(live.videoHeight * s); cv.getContext('2d').drawImage(live, 0, 0, cv.width, cv.height);
-      cv.toBlob(function(b){ if(!b){ toast('Could not take the picture'); return; } state.image = b; showMedia(); toast('Picture taken'); }, 'image/jpeg', 0.85); }
+      cv.toBlob(function(b){ if(!b){ toast('Could not take the picture'); return; } if(state.images.length >= MAXPIC){ toast('Up to ' + MAXPIC + ' pictures in one post'); return; } state.images.push(b); showMedia(); toast('Picture taken'); }, 'image/jpeg', 0.85); }
     function startRec(){ if(!stream){ toast('Open the camera first'); return; } if(!window.MediaRecorder){ toast('Recording is not available here. Use Upload video instead.'); return; }
       chunks = []; var type = videoType(), opt = { videoBitsPerSecond: 1000000, audioBitsPerSecond: 64000 }; if(type) opt.mimeType = type; rec = new MediaRecorder(stream, opt);
       rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
@@ -191,18 +195,19 @@ window.StudioKit = function(E){
 
     var postBtn = h('button', { class: 'btn block', type: 'button', id: 'st-post', onclick: function(){
       var cf = persist(); if(!cf.token){ toast('The token is missing. Paste it in Publishing setup and tap Save and check.'); return; } if(!cf.repo){ toast('The repository is missing. Add it in Publishing setup.'); return; }
-      var t = title.value.trim(), tx = body.value.trim(); if(!t){ toast('Add a title'); return; } if(!tx && !state.image && !state.video){ toast('Add some text, a picture or a video'); return; }
+      var t = title.value.trim(), tx = body.value.trim(); if(!t){ toast('Add a title'); return; } if(!tx && !state.images.length && !state.video){ toast('Add some text, a picture or a video'); return; }
       if(rec && rec.state === 'recording'){ toast('Stop the recording first'); return; }
       if(working){ toast('Wait for the video to finish getting smaller, or tap Cancel'); return; }
       var p = { id: newId(), title: t, ref: ref.value.trim(), body: tx, at: new Date().toISOString(), homecell: hc.checked }, files = [];
-      if(state.image){ p.image = 'posts/' + p.id + '/picture.jpg'; files.push({ name: 'picture.jpg', label: 'picture', blob: state.image }); }
+      if(!CreatorTools.isPlain(state.style)) p.style = JSON.parse(JSON.stringify(state.style));
+      if(state.images.length){ p.images = []; state.images.forEach(function(b, k){ var nm = state.images.length > 1 ? 'picture-' + (k + 1) + '.jpg' : 'picture.jpg'; p.images.push('posts/' + p.id + '/' + nm); files.push({ name: nm, label: state.images.length > 1 ? 'picture ' + (k + 1) + ' of ' + state.images.length : 'picture', blob: b }); }); p.image = p.images[0]; }
       if(state.video){ var vn = 'video.' + vext(state.video); p.video = 'posts/' + p.id + '/' + vn; files.push({ name: vn, label: 'video', blob: state.video }); }
       postBtn.disabled = true; refreshReady(); var step = function(m){ status.textContent = m; };
-      publish(p, files, step).then(function(){ step('Posted. It can take a minute or two to show on every phone.'); toast('Posted'); title.value = ''; ref.value = ''; body.value = ''; hc.checked = false; state.image = state.video = null; showMedia(); postBtn.disabled = false; drawList(); },
+      publish(p, files, step).then(function(){ step('Posted. It can take a minute or two to show on every phone.'); toast('Posted'); title.value = ''; ref.value = ''; body.value = ''; hc.checked = false; state.images = []; state.video = null; showMedia(); postBtn.disabled = false; drawList(); },
         function(e){ postBtn.disabled = false; refreshReady(); step((e.status === 401 ? 'GitHub says the token is not valid (401). It may have been copied wrong or has expired. Make a new one. ' : e.status === 403 ? 'GitHub refused (403). The token needs Contents: Read and write for this repository, and it must be made in the account that owns the repository. ' : e.status === 404 ? 'GitHub could not find the repository with this token (404). The repository name may be wrong, or the token was not made for it. ' : 'Could not post. ') + (e.message ? 'GitHub says: ' + e.message : '')); }); } }, 'Post to Devotions');
 
     /* the Post button turns green when everything needed is in place */
-    function refreshReady(){ var k = cfg(), recording = rec && rec.state === 'recording', ok = title.value.trim() && (body.value.trim() || state.image || state.video) && k.token && k.repo && !recording && !working && !postBtn.disabled;
+    function refreshReady(){ var k = cfg(), recording = rec && rec.state === 'recording', ok = title.value.trim() && (body.value.trim() || state.images.length || state.video) && k.token && k.repo && !recording && !working && !postBtn.disabled;
       postBtn.classList.toggle('ready', !!ok); postBtn.textContent = ok ? '✓ Ready, Post to Devotions' : 'Post to Devotions'; }
     ['input', 'change'].forEach(function(ev){ title.addEventListener(ev, refreshReady); body.addEventListener(ev, refreshReady); });
     var list = h('div', { class: 'stack', id: 'st-list' });
@@ -232,7 +237,7 @@ window.StudioKit = function(E){
     window.__stReady = refreshReady; drawList(); showBadge(); refreshReady();
     var pg = E.page('Creator Studio', 'play', go, h('div', { class: 'stack narrow' },
       h('div', { class: 'row' }, h('p', { class: 'note' }, 'Write, record or upload your own devotion and post it straight to the Devotions page. Anyone can read, watch and download it.'), h('button', { class: 'btn ghost sm', type: 'button', id: 'dv-out', onclick: function(){ lockNow(); toast('Signed out'); go('studio'); } }, 'Sign out')),
-      h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, body,
+      h('div', { class: 'card' }, h('div', { class: 'ch' }, h('span', { class: 'ic' }, E.icon('journal')), 'New post'), title, ref, CreatorTools.styleBar(h, body, state.style), body,
         h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;justify-content:flex-start;margin-top:8px' }, openBtn, h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-vid', onclick: function(){ vidIn.click(); } }, 'Upload video'), h('button', { class: 'btn ghost', type: 'button', id: 'st-pick-img', onclick: function(){ imgIn.click(); } }, 'Add picture'), imgIn, vidIn),
         h('div', { class: 'camwrap' }, live, camBox), mediaNote, cancelBtn, preview,
         h('label', { class: 'row', style: 'justify-content:flex-start;gap:8px;margin:10px 0', for: 'st-hc' }, hc, h('span', {}, 'Also push it to the Online Homecell')),
