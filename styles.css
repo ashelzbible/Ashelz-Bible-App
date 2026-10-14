@@ -424,3 +424,4 @@ img.i3{filter:saturate(1.2) contrast(1.06) drop-shadow(0 3px 4px rgba(10,31,77,.
 .vcard.haspic>svg{display:none}.vcard.haspic{background:linear-gradient(rgba(6,18,44,.42),rgba(6,18,44,.8)),var(--dpic) center/cover no-repeat}
 .dpic{position:relative;height:190px;border-radius:var(--r);background:var(--dpic) center/cover no-repeat;overflow:hidden;box-shadow:var(--shadow)}
 .dcredit{position:absolute;right:10px;bottom:6px;font-size:.66rem;color:#fff;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.7);z-index:3}
+.dposter{position:relative;text-align:center;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);background:#0a1230}.dposter img{display:block;margin:0 auto;max-width:100%;max-height:520px;width:auto;height:auto}

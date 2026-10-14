@@ -42,5 +42,16 @@
    "peace",
    "anger"
   ]
+ },
+ {
+  "file": "05.jpg",
+  "credit": "",
+  "poster": true,
+  "themes": [
+   "strength",
+   "fear",
+   "anxiety",
+   "purpose"
+  ]
  }
 ]
