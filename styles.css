@@ -407,7 +407,7 @@ img.i3{filter:saturate(1.2) contrast(1.06) drop-shadow(0 3px 4px rgba(10,31,77,.
 .pstudio{position:fixed;inset:0;z-index:200;background:#0a1230;color:#fff;overflow:auto}.pstudio .psbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#0a1230;border-bottom:1px solid rgba(255,255,255,.15)}
 .pstudio .pscanvaswrap{padding:10px 12px;display:flex;justify-content:center;background:#050a1c}.pstudio .pscanvas{max-width:100%;max-height:52vh;border-radius:8px;touch-action:none;background:#000}
 .pstudio .card{background:#13204a;color:#fff}.pstudio textarea,.pstudio select{background:#0a1230;color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:8px;width:100%}.pstudio select{width:auto}.pstudio input[type=range]{width:100%}
-.psfilters{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.chip{flex:none;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:8px 14px;font-weight:600}.chip.on{background:#f6c453;color:#111;border-color:#f6c453}
+.psfilters{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.pstudio .chip{flex:none;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:8px 14px;font-weight:600}.pstudio .chip.on{background:#f6c453;color:#111;border-color:#f6c453}
 .pstudio .psgrid{background:#13204a;border-color:rgba(255,255,255,.2)}.pstudio .psgrid.stk{grid-template-columns:repeat(2,1fr)}.stickerbtn{border:2px solid rgba(255,255,255,.8);border-radius:999px;color:#fff;font-weight:800;padding:10px 8px}
 
 /* clearly visible app icon watermark on every page, profile pictures (2.4.26) */
