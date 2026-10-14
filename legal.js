@@ -1,7 +1,7 @@
 /* Privacy policy and data deletion text. Used by the app (Settings, Privacy Policy) and by privacy.html, so both always say the same thing.
    Plain words. It describes what the app does; it does not claim legal approval. Privacy and data laws are to be confirmed with the relevant legal bodies, authorities and entities of Namibia. */
 window.LEGAL = (function(){
-  var C = { app: 'Ashelz Bible App', dev: 'Loren-Ashlyn De Koe', place: 'Windhoek, Namibia', email: 'ashlyn.dekoe1@gmail.com', date: '14 October 2026' };
+  var C = { app: 'Ashelz Bible App', dev: 'Loren-Ashlyn Van Rensburg', place: 'Windhoek, Namibia', email: 'ashlyn.dekoe1@gmail.com', date: '14 October 2026' };
   var privacy = [
     ['The short version', ['Ashelz Bible App is free. It has no ads, no tracking and no analytics, and it does not sell or share your information. Your name, prayers, notes, journal, favourites, profile picture and settings stay on your own phone. There is no Ashelz account server.']],
     ['Who we are', [C.app + ' is made and run by ' + C.dev + ', ' + C.place + '. Questions about privacy: ' + C.email + '.']],

@@ -36,7 +36,7 @@ MADE WITH CARE
 - Your prayers, notes, and journal stay on your own phone.
 - Choose your accent colour, dark mode, and text size.
 
-Founded and developed by Loren-Ashlyn De Koe, Windhoek, Namibia. Dedicated to making the Word available to everyone, everywhere, entirely for free.
+Founded and developed by Loren-Ashlyn Van Rensburg, Windhoek, Namibia. Dedicated to making the Word available to everyone, everywhere, entirely for free.
 
 Bible versions come from public domain collections and from services that supply licensed text. Each version shows its own copyright terms.
 
@@ -49,7 +49,7 @@ Bible versions come from public domain collections and from services that supply
 ## Contact details
 - Email: ashlyn.dekoe1@gmail.com
 - Website: https://ashelzbible.github.io/Ashelz-Bible-App/
-- Developer name: Loren-Ashlyn De Koe
+- Developer name: Loren-Ashlyn Van Rensburg
 - Country: Namibia (Windhoek)
 
 ## Policy links
@@ -64,4 +64,4 @@ Bible versions come from public domain collections and from services that supply
 
 ## Notes
 - The listing makes no claim of being official, certified, or approved by any church body or store.
-- The developer name above must match the name on the Play developer account. The app's own About page names the founder as "Loren Ashyn Van Rensburg". If that is the same person under another name, decide which spelling you want and tell me so both match.
+- The developer name above (Loren-Ashlyn Van Rensburg) must match the name on the Play developer account and the name shown in the app. The app, the privacy policy and this listing now all use that spelling.

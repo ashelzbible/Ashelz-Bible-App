@@ -9,4 +9,4 @@ Do these in order. Nothing here is legal advice, and nothing claims approval by 
 5. Fill the store listing (store_listing.md), the Data safety form (data_safety.md) and the content rating (content_rating.md). Upload the pictures from the graphics folder.
 6. After the test period, apply for production in Play Console.
 
-Contact shown everywhere: ashlyn.dekoe1@gmail.com. Developer name: Loren-Ashlyn De Koe. Country: Namibia.
+Contact shown everywhere: ashlyn.dekoe1@gmail.com. Developer name: Loren-Ashlyn Van Rensburg. Country: Namibia.
