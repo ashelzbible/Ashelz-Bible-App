@@ -4,33 +4,43 @@
   "credit": "",
   "themes": [
    "salvation",
-   "grief",
    "guilt",
    "forgiveness",
-   "love",
    "hope",
-   "strength",
    "doubt",
    "identity",
    "purpose",
-   "prayer",
-   "temptation"
+   "temptation",
+   "grief"
   ]
  },
  {
   "file": "02.jpg",
   "credit": "",
   "themes": [
-   "peace",
    "anxiety",
    "fear",
    "depression",
    "loneliness",
    "patience",
-   "gratitude",
    "renew",
    "health",
-   "finance"
+   "finance",
+   "strength"
+  ]
+ },
+ {
+  "file": "03.jpg",
+  "credit": "",
+  "themes": [
+   "prayer",
+   "love",
+   "marriage",
+   "parenting",
+   "conflict",
+   "gratitude",
+   "peace",
+   "anger"
   ]
  }
 ]
