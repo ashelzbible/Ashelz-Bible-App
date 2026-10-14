@@ -53,9 +53,7 @@ window.StudioKit = function(E){
     if(p.video) kids.push(h('video', { class: 'postmedia', src: p.video, controls: true, playsinline: true, preload: 'metadata', 'aria-label': 'Video: ' + p.title, style: 'width:100%;max-height:420px;border-radius:12px;background:#000' }));
     var imgs = postImages(p); if(imgs.length) kids.push(h('div', { class: 'postgallery g' + Math.min(imgs.length, 4) }, imgs.map(function(u){ return h('img', { class: 'postmedia', src: u, alt: p.title, loading: 'lazy' }); })));
     if(p.body) kids.push(h('p', { class: 'selectable', style: 'margin-top:8px;' + (window.CreatorTools ? CreatorTools.styleCss(p.style) : 'white-space:pre-wrap') }, p.body));
-    var row = [h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'text', onclick: function(){ E.saveBlob(new Blob([postText(p)], { type: 'text/plain' }), 'ashelz-' + p.id + '.txt'); toast('Text downloaded'); } }, 'Download text')];
-    imgs.forEach(function(u, k){ row.push(h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'image', onclick: function(){ download(u, 'ashelz-' + p.id + (imgs.length > 1 ? '-' + (k + 1) : '') + '.' + ext(u)); } }, imgs.length > 1 ? 'Download picture ' + (k + 1) : 'Download image')); });
-    if(p.video) row.push(h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'video', onclick: function(){ download(p.video, 'ashelz-' + p.id + '.' + ext(p.video)); } }, 'Download video'));
+    var row = [E.openDownload ? h('button', { class: 'btn ghost sm', type: 'button', 'data-dl': 'menu', onclick: function(){ E.openDownload(function(){ return window.Export.fromText(p.title, (p.ref ? p.ref + '\n\n' : '') + (p.body || ''), imgs.map(function(u){ return { k: 'img', src: u }; })); }, 'ashelz-' + p.id); } }, 'Download') : null];
     row.push(h('button', { class: 'btn ghost sm', type: 'button', onclick: function(){ E.share(postText(p)); } }, 'Share'));
     kids.push(h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:10px' }, row));
     if(extra) kids.push(extra);
