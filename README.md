@@ -80,3 +80,6 @@ Bible Translations has an **All languages** card: it loads the list of free vers
 
 ## Biblia.com versions (2.4.29)
 Bible Translations has a **More versions from Biblia.com** card. The app carries a Biblia.com (Faithlife) key in `config.js` (`bibliaKey`), so readers need no key of their own. It is a public app key: in your Biblia.com account, set the Application URL to the app address so other sites cannot reuse it. Tested here with a pretend copy of the service in the format I expected; the first live use needs a check. The NIV is not offered by Biblia.com.
+
+## Picture of the day (2.4.33)
+The home verse card and the top of the Devotions page show a picture from the `daily/` folder. `daily/index.json` lists each file, an optional credit line, and the devotion themes it suits (for example `grief`, `hope`, `peace`). The app picks one for the day, matched to the theme when it can, and keeps the drawn scene if the folder is empty or the phone is offline. To add a picture: put the file in `daily/` (about 1080 pixels wide, JPEG) and add a line to `index.json`. Only add pictures you have the right to use, and put the credit text in `credit` when the licence asks for it.
