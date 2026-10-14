@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.ashelzbible.bible",
+      "sha256_cert_fingerprints": [
+        "REPLACE:WITH:THE:SHA256:FINGERPRINT:FROM:PLAY:CONSOLE"
+      ]
+    }
+  }
+]
