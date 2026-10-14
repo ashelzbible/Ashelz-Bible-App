@@ -7,6 +7,8 @@ window.APPCFG = {
   /* where the Creator Studio saves posts (the repository the official site is published from) */
   /* Biblia.com (Faithlife) key for the Bible Translations page. It is a public app key, so also set its Application URL in your Biblia.com account to the app address. */
   bibliaKey: 'f1df097baab12b147082ecbae3ff5415',
+  /* Optional: an API.Bible key for every reader of the Bible Translations page. Leave empty to have each reader paste their own key. */
+  apiBibleKey: '',
   publishRepo: 'mrandrecloete-hub/ashelz-bible-app', publishBranch: 'main',
   officialHosts: ['ashelzbible.github.io', 'ashelz-bible-app.netlify.app', 'ashlez.netlify.app']
 };
