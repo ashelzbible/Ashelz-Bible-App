@@ -1,0 +1,56 @@
+{
+  "name": "wazzupp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wazzupp: Connect. Communicate. Collaborate.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev:server": "node --watch server/src/main.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build:web": "vite build --config web/vite.config.ts",
+    "start": "node server/src/main.ts",
+    "migrate": "node server/src/db/migrate.ts",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "lint": "eslint server web/src",
+    "test": "node --test --test-concurrency=1 --test-timeout=60000 \"server/test/**/*.test.ts\"",
+    "e2e": "node e2e/run.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/static": "^10.1.7",
+    "@node-rs/argon2": "^2.2.2",
+    "fastify": "^5.12.7",
+    "file-type": "^22.2.0",
+    "ioredis": "^6.0.0",
+    "nodemailer": "^10.2.1",
+    "otpauth": "^9.5.2",
+    "pg": "^8.23.1",
+    "sharp": "^0.35.5",
+    "web-push": "^3.6.7",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.13.0",
+    "playwright": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5"
+  }
+}
