@@ -177,6 +177,14 @@ describe('authorization: changing ids never exposes other people\'s data', () =>
     assert.equal((await a.get(`/api/users/search?q=${encodeURIComponent((b as any).email.slice(0, 6) + '@')}`)).body.users.length, 0);
   });
 
+  it('finds usernames containing underscores and treats LIKE wildcards literally', async () => {
+    const a = await newUser(ctx, 'a'); const b = await newUser(ctx, 'finder_target');
+    const un = (b as any).username as string;
+    assert.equal((await a.get(`/api/users/search?q=${encodeURIComponent(un.slice(0, 9))}`)).body.users.length, 1);
+    assert.equal((await a.get('/api/users/search?q=%25%25%25')).body.users.length, 0, 'a wildcard does not match everyone');
+    assert.equal((await a.get('/api/users/search?q=___')).body.users.length, 0, 'underscores are literal');
+  });
+
   it('versions settings and rejects stale writes with the current copy', async () => {
     const a = await newUser(ctx, 'a');
     const s = (await a.get('/api/me/settings')).body;

@@ -33,7 +33,7 @@ export async function communityRoutes(app: FastifyInstance) {
     const id = await tx(async (t) => {
       if (b.avatarMediaId) { const a = await t.one(`select owner_id from media_assets where id = $1`, [b.avatarMediaId]); if (!a || a.owner_id !== me) throw badRequest('invalid_media'); }
       const c = await t.one(`insert into communities(name, description, visibility, created_by, avatar_media_id) values ($1,$2,$3,$4,$5) returning id`, [b.name, b.description, b.visibility, me, b.avatarMediaId ?? null]);
-      const ann = await t.one(`insert into conversations(kind, title, description, created_by, announce_only, community_id, avatar_media_id) values ('announcement',$1,$2,$3,true,$4,$5) returning id`, ['Announcements', `Announcements for ${b.name}`, me, c.id, b.avatarMediaId ?? null]);
+      const ann = await t.one(`insert into conversations(kind, title, description, created_by, announce_only, community_id, avatar_media_id) values ('announcement',$1,$2,$3,true,$4,$5) returning id`, [`${b.name} · Announcements`, `Announcements for ${b.name}`, me, c.id, b.avatarMediaId ?? null]);
       await t.q(`update communities set announcement_conversation_id = $2 where id = $1`, [c.id, ann.id]);
       await t.q(`insert into community_members(community_id, user_id, role) values ($1,$2,'owner')`, [c.id, me]);
       await joinAnnouncement(t, ann.id, me, 'owner');

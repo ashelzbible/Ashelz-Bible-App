@@ -86,8 +86,8 @@ export async function userRoutes(app: FastifyInstance) {
             and not exists(select 1 from blocks b where b.blocker_id = u.id and b.blocked_id = $2)`, [isEmail ? lower : term, me])).rows;
     } else {
       rows = (await q(
-        `select u.id from users u where u.status = 'active' and lower(u.username::text) like $1 || '%' and u.id <> $2
-            and not exists(select 1 from blocks b where b.blocker_id = u.id and b.blocked_id = $2) order by u.username limit 20`, [lower.replace(/[%_\\]/g, ''), me])).rows;
+        `select u.id from users u where u.status = 'active' and lower(u.username::text) like $1 || '%' escape '\\' and u.id <> $2
+            and not exists(select 1 from blocks b where b.blocker_id = u.id and b.blocked_id = $2) order by u.username limit 20`, [lower.replace(/[%_\\]/g, (c) => '\\' + c), me])).rows;
     }
     const users = (await Promise.all(rows.map((r) => publicUser(r.id, me)))).filter(Boolean);
     return { users: users.map((u) => ({ id: u!.id, username: u!.username, displayName: u!.displayName, avatarMediaId: u!.avatarMediaId })) };

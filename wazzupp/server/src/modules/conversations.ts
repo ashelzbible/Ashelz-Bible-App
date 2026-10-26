@@ -46,13 +46,13 @@ export async function conversationSummary(userId: string, onlyId?: string) {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const last = await q(
-    `select ${MESSAGE_COLS}, cm.conversation_id cid
+    `select ${MESSAGE_COLS}, cm.conversation_id cid, sp.display_name sender_name
        from conversation_members cm
        join lateral (select mm.* from messages mm where mm.conversation_id = cm.conversation_id and mm.seq > cm.first_visible_seq and (not mm.undelivered or mm.sender_id = $1)
               and (mm.expires_at is null or mm.expires_at > now()) and not exists (select 1 from message_hidden h where h.message_id = mm.id and h.user_id = $1) order by mm.seq desc limit 1) m on true
-       ${MESSAGE_JOINS}
+       ${MESSAGE_JOINS} left join user_profiles sp on sp.user_id = m.sender_id
       where cm.user_id = $1 and cm.conversation_id = any($2::uuid[])`, [userId, ids]);
-  const lastBy = new Map(last.rows.map((r) => [r.cid, toMessage(r)]));
+  const lastBy = new Map(last.rows.map((r) => [r.cid, { ...toMessage(r), senderName: r.sender_name as string | null }]));
   const wm = await q(
     `select conversation_id, min(last_delivered_seq)::bigint d, min(read_receipt_seq)::bigint r from conversation_members
       where conversation_id = any($2::uuid[]) and user_id <> $1 and left_at is null and not removed group by conversation_id`, [userId, ids]);
