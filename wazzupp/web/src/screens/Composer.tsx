@@ -52,7 +52,7 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
     setPending((p) => [...p, ...next].slice(0, 10));
   }, []);
   useEffect(() => { if (files.length) { addFiles(files); clearFiles(); } }, [files, addFiles, clearFiles]);
-  useEffect(() => () => pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview)), []); // eslint-disable-line
+  useEffect(() => () => pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview)), []);  
 
   async function uploadAll(caption: string) {
     const items = pending.slice();
@@ -134,7 +134,7 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
       if (rec.url) URL.revokeObjectURL(rec.url); setRec(null); onClearReply(); onSent();
     } catch (e) { toastError(e); } // upload recovery: the recording stays in preview so it can be retried
   }
-  useEffect(() => () => { cleanupRec(); }, []); // eslint-disable-line
+  useEffect(() => () => { cleanupRec(); }, []);  
 
   async function shareLocation() {
     if (!navigator.geolocation) { toast('Location is not available on this device', 'error'); return; }

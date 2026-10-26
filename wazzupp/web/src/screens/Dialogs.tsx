@@ -143,7 +143,7 @@ export function ScheduleDialog({ convId, initial, onClose, onDone }: { convId: s
   const [body, setBody] = useState(initial); const [when, setWhen] = useState('');
   const [list, setList] = useState<Array<{ id: string; conversationId: string; body: string; sendAt: string }>>([]);
   const load = () => api.get('/api/scheduled').then((r) => setList(r.scheduled.filter((s: any) => s.conversationId === convId))).catch(() => {});
-  useEffect(() => { void load(); }, []); // eslint-disable-line
+  useEffect(() => { void load(); }, []);  
   return (
     <Dialog title="Schedule message" onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={!body.trim() || !when} onClick={async () => {
       try { await api.post(`/api/conversations/${convId}/scheduled`, { body: body.trim(), sendAt: new Date(when).toISOString() }); toast('Message scheduled'); onDone(); setBody(''); setWhen(''); await load(); }

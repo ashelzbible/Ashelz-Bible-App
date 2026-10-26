@@ -73,7 +73,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: { code: 'not_found', message: 'No such endpoint' } }));
 
   if (existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist, wildcard: false, setHeaders: (res, p) => { if (p.endsWith('index.html') || p.endsWith('sw.js')) res.header('Cache-Control', 'no-cache'); } });
+    await app.register(fastifyStatic, { root: webDist, setHeaders: (res, p) => { if (p.endsWith('index.html') || p.endsWith('sw.js')) res.header('Cache-Control', 'no-cache'); } });
     app.setNotFoundHandler((req, reply) => (req.method === 'GET' && !req.url.startsWith('/api/') ? reply.type('text/html').sendFile('index.html') : reply.code(404).send({ error: { code: 'not_found' } })));
   }
   return app;

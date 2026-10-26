@@ -73,7 +73,7 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
       markRead(id);
     })();
     return () => { alive = false; };
-  }, [id]); // eslint-disable-line
+  }, [id]);  
   useEffect(() => { const h = (e: Event) => setEditing((e as CustomEvent).detail); document.addEventListener('wz-edit', h); return () => document.removeEventListener('wz-edit', h); }, []);
 
   const list = thread?.list ?? [];
@@ -83,7 +83,7 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
     if (prevHeight.current && !stick.current) { el.scrollTop += el.scrollHeight - prevHeight.current; prevHeight.current = 0; return; }
     if (stick.current) el.scrollTop = el.scrollHeight;
   }, [lastKey, thread?.loaded, list.length === 0]);
-  useEffect(() => { if (document.hasFocus() && atBottom && conv && conv.unread > 0) markRead(id); }, [conv?.unread, atBottom]); // eslint-disable-line
+  useEffect(() => { if (document.hasFocus() && atBottom && conv && conv.unread > 0) markRead(id); }, [conv?.unread, atBottom]);  
 
   const onScroll = () => {
     const el = scroller.current; if (!el) return;
@@ -130,12 +130,12 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
     ];
     const mineReact = m.reactions?.find((r) => r.userId === me.id)?.emoji;
     (menu.open as any)(items, e, (close: () => void) => <div className="react-bar">{QUICK_REACTIONS.map((em) => <button key={em} className={mineReact === em ? 'on' : ''} onClick={() => { close(); react(m, em); }} aria-label={`React ${em}`}>{em}</button>)}</div>);
-  }, [id, me.id, react]); // eslint-disable-line
+  }, [id, me.id, react]);  
 
   const openMedia = useCallback((m: Msg) => setViewer(m), []);
   const retry = useCallback((m: Msg) => retryMessage(id, m.clientMsgId), [id]);
   const swipe = useCallback((m: Msg) => setReply(m), []);
-  const jumpTo = useCallback((mid: string) => { const t = getState().msgs[id]?.list.find((x) => x.id === mid); if (t) scrollTo(mid); }, [id]); // eslint-disable-line
+  const jumpTo = useCallback((mid: string) => { const t = getState().msgs[id]?.list.find((x) => x.id === mid); if (t) scrollTo(mid); }, [id]);  
 
   const rows = useMemo(() => {
     const out: Array<{ key: string; type: 'day' | 'unread' | 'msg'; label?: string; m?: Msg; first?: boolean; last?: boolean }> = [];
@@ -181,8 +181,9 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
       <div className="head-actions">
         {conv.kind === 'direct' ? <><button className="icon-btn on-head" onClick={() => startCall(id, 'video')} aria-label="Video call" title="Video call"><Icon name="video" /></button>
           <button className="icon-btn on-head" onClick={() => startCall(id, 'audio')} aria-label="Voice call" title="Voice call"><Icon name="phone" /></button></> : null}
-        <button className="icon-btn on-head" onClick={() => setSearching(true)} aria-label="Search in chat" title="Search"><Icon name="search" /></button>
+        <button className={`icon-btn on-head ${layout === 'mobile' ? 'hide-sm' : ''}`} onClick={() => setSearching(true)} aria-label="Search in chat" title="Search"><Icon name="search" /></button>
         <button className="icon-btn on-head" aria-label="More" onClick={(e) => headMenu.open([
+          { label: 'Search', icon: 'search', hidden: layout !== 'mobile', onClick: () => setSearching(true) },
           { label: 'Contact info', icon: 'info', onClick: () => (layout === 'desktop' ? setShowInfo(true) : go(`chats/${id}/info`)) },
           { label: 'Select chat media', icon: 'image', onClick: () => go(`chats/${id}/info`) },
           { label: conv.muted ? 'Unmute' : 'Mute notifications', icon: conv.muted ? 'bell' : 'bell-off', onClick: () => guard(patchState(id, { mutedUntil: conv.muted ? null : 'forever' })) },
@@ -246,7 +247,7 @@ function DeleteDialog({ msg, mine, staff, onClose }: { msg: Msg; mine: boolean; 
 }
 function HistoryDialog({ msg, onClose }: { msg: Msg; onClose: () => void }) {
   const [h, setH] = useState<{ current: string; edits: Array<{ body: string; editedAt: string }> } | null>(null);
-  useEffect(() => { api.get(`/api/messages/${msg.id}/edits`).then(setH).catch(() => onClose()); }, [msg.id]); // eslint-disable-line
+  useEffect(() => { api.get(`/api/messages/${msg.id}/edits`).then(setH).catch(() => onClose()); }, [msg.id]);  
   return <Dialog title="Edit history" onClose={onClose}>{h ? <ul className="stack">{[...h.edits.map((e) => ({ t: e.body, at: e.editedAt, cur: false })).reverse(), { t: h.current, at: msg.editedAt!, cur: true }].reverse().map((e, i) => <li key={i} className="hist"><small className="muted">{e.cur ? 'Current' : `Replaced ${clock(e.at)}`}</small><p>{e.t}</p></li>)}</ul> : <div className="spinner" />}</Dialog>;
 }
 function ReportDialog({ msg, onClose }: { msg: Msg; onClose: () => void }) {
@@ -266,7 +267,7 @@ function SearchBar({ convId, onClose, onPick }: { convId: string; onClose: () =>
     if (q.trim().length < 2) { setHits([]); return; }
     const t = setTimeout(() => api.get(`/api/search?q=${encodeURIComponent(q.trim())}&type=messages&conversationId=${convId}&limit=50`).then((r) => { setHits(r.messages); setI(0); if (r.messages[0]) onPick(r.messages[0].seq); }).catch(() => {}), 300);
     return () => clearTimeout(t);
-  }, [q]); // eslint-disable-line
+  }, [q]);  
   const step = (d: number) => { if (!hits.length) return; const n = (i + d + hits.length) % hits.length; setI(n); onPick(hits[n].seq); };
   return (
     <header className="conv-head search-head">

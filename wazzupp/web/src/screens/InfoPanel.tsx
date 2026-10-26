@@ -149,7 +149,7 @@ function InviteDialog({ convId, staff, onClose }: { convId: string; staff: boole
   const [link, setLink] = useState<{ id: string; url: string; exp: string | null } | null>(null);
   const [list, setList] = useState<any[]>([]);
   const load = () => staff ? api.get(`/api/conversations/${convId}/invites`).then((r) => setList(r.invites.filter((i: any) => !i.revoked_at))).catch(() => {}) : undefined;
-  useEffect(() => { void load(); }, []); // eslint-disable-line
+  useEffect(() => { void load(); }, []);  
   const make = async () => { const r = await guard(api.post(`/api/conversations/${convId}/invites`, { expiresInHours: 168 })); if (r) { setLink({ id: r.id, url: `${location.origin}/#/join/${r.code}`, exp: r.expiresAt }); void load(); } };
   return (
     <Dialog title="Invite via link" onClose={onClose}>

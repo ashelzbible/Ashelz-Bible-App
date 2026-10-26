@@ -26,7 +26,7 @@ export function Admin() {
 }
 function useLoad<T>(url: string, deps: unknown[] = []): [T | null, () => void] {
   const [d, setD] = useState<T | null>(null); const [n, setN] = useState(0);
-  useEffect(() => { api.get(url).then(setD).catch(() => setD(null)); }, [url, n, ...deps]); // eslint-disable-line
+  useEffect(() => { api.get(url).then(setD).catch(() => setD(null)); }, [url, n, ...deps]);  
   return [d, () => setN((x) => x + 1)];
 }
 function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) { return <div className="stat"><small>{label}</small><b>{value}</b>{sub ? <small className="muted">{sub}</small> : null}</div>; }

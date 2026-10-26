@@ -133,7 +133,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
 }
 function MfaSetup({ onClose }: { onClose: () => void }) {
   const [s, setS] = useState<{ secret: string; otpauthUri: string } | null>(null); const [code, setCode] = useState('');
-  useEffect(() => { api.post('/api/me/mfa/setup').then(setS).catch((e) => { toastError(e); onClose(); }); }, []); // eslint-disable-line
+  useEffect(() => { api.post('/api/me/mfa/setup').then(setS).catch((e) => { toastError(e); onClose(); }); }, []);  
   return <Dialog title="Two-step verification" onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={code.length !== 6} onClick={async () => { const r = await guard(api.post('/api/me/mfa/enable', { code })); if (r) { await refreshMe(); toast('Two-step verification is on'); onClose(); } }}>Turn on</button></>}>
     <p className="muted">Add this key to an authenticator app (Google Authenticator, 1Password, Authy…), then enter the 6-digit code.</p>
     {s ? <><code className="secret">{s.secret.match(/.{1,4}/g)?.join(' ')}</code><a className="link" href={s.otpauthUri}>Open in authenticator app</a></> : <div className="spinner" />}

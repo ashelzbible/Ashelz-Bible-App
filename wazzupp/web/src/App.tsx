@@ -67,7 +67,7 @@ function Welcome({ text }: { text?: string }) {
 export function App() {
   const booted = useStore((s) => s.booted); const me = useStore((s) => s.me);
   useEffect(() => { void boot(); }, []);
-  useEffect(() => { if (me) { applyAppearance(me.settings.appearance); void resumeActiveCall(); } }, [me?.id]); // eslint-disable-line
+  useEffect(() => { if (me) { applyAppearance(me.settings.appearance); void resumeActiveCall(); } }, [me?.id]);  
   useEffect(() => { const on = () => void flushOutbox(); window.addEventListener('online', on); return () => window.removeEventListener('online', on); }, []);
   const unread = useStore((s) => Object.values(s.convs).reduce((n, c) => n + (c.muted || c.archived ? 0 : c.unread), 0));
   useEffect(() => { document.title = unread ? `(${unread}) Wazzupp` : 'Wazzupp'; }, [unread]);

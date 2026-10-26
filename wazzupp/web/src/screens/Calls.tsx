@@ -98,7 +98,7 @@ export function CallOverlay() {
       </div>
       {call.kind === 'video' || media.local?.getVideoTracks().length ? <video ref={localRef} autoPlay playsInline muted className={`call-local ${media.cameraOff ? 'off' : ''}`} /> : null}
       {incoming ? (
-        <div className="call-actions two"><div><button className="call-round red" onClick={() => declineCall()} aria-label="Decline"><Icon name="phone-off" size={30} /></button><span>Decline</span></div><div><button className="call-round green" onClick={() => acceptCall()} aria-label="Accept"><Icon name={call.kind === 'video' ? 'video' : 'phone'} size={30} /></button><span>Accept</span></div></div>
+        <div className="call-actions two"><div><button className="call-round end" onClick={() => declineCall()} aria-label="Decline"><Icon name="phone-off" size={30} /></button><span>Decline</span></div><div><button className="call-round accept" onClick={() => acceptCall()} aria-label="Accept"><Icon name={call.kind === 'video' ? 'video' : 'phone'} size={30} /></button><span>Accept</span></div></div>
       ) : ended ? null : (
         <div className="call-actions">
           <div className="call-opts">
@@ -108,7 +108,7 @@ export function CallOverlay() {
             {call.kind === 'video' && !media.cameraOff && (media.devices.videoIn.length > 1 || layout === 'mobile') ? <div><button className="call-opt" onClick={() => switchCamera()} aria-label="Switch camera"><Icon name="switch-camera" size={26} /></button><span>Flip</span></div> : null}
             {layout !== 'mobile' && 'getDisplayMedia' in (navigator.mediaDevices ?? {}) && call.state === 'connected' ? <div><button className={`call-opt ${media.sharing ? 'on' : ''}`} onClick={() => toggleScreenShare()} aria-pressed={media.sharing} aria-label="Share screen"><Icon name="screen-share" size={26} /></button><span>{media.sharing ? 'Stop' : 'Share'}</span></div> : null}
           </div>
-          <button className="call-round red" onClick={() => hangUp()} aria-label="End call"><Icon name="phone-off" size={30} /></button>
+          <button className="call-round end" onClick={() => hangUp()} aria-label="End call"><Icon name="phone-off" size={30} /></button>
         </div>
       )}
       {media.sharing ? <div className="sharing-bar"><Icon name="screen-share" size={18} />You are sharing your screen<button className="btn btn-danger btn-sm" onClick={() => toggleScreenShare()}>Stop sharing</button></div> : null}

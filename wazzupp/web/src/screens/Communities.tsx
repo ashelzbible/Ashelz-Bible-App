@@ -46,15 +46,15 @@ export function CommunityDetail({ id }: { id: string }) {
   const [c, setC] = useState<Community | null>(null); const [members, setMembers] = useState<any[]>([]); const [err, setErr] = useState(false);
   const [dlg, setDlg] = useState<null | 'announce' | 'link' | 'invite'>(null);
   const load = () => api.get(`/api/communities/${id}`).then((r) => setC(r.community)).catch(() => setErr(true));
-  useEffect(() => { setC(null); setErr(false); void load(); api.get(`/api/communities/${id}/members`).then((r) => setMembers(r.members)).catch(() => {}); }, [id]); // eslint-disable-line
+  useEffect(() => { setC(null); setErr(false); void load(); api.get(`/api/communities/${id}/members`).then((r) => setMembers(r.members)).catch(() => {}); }, [id]);  
   const cover = useMedia(c?.avatarMediaId);
   if (err) return <div className="conv-empty"><Empty icon="users" title="Community not found" text="It may be private or you may no longer be a member." /></div>;
   if (!c) return <div className="conv-empty"><div className="spinner" /></div>;
   const admin = c.role === 'owner' || c.role === 'admin';
   return (
-    <div className="comm">
+    <div className="comm-wrap"><div className="comm">
       <div className="comm-main">
-        <header className="comm-head">{layout !== 'desktop' ? <button className="icon-btn" onClick={() => back()} aria-label="Back"><Icon name="back" /></button> : null}<div className="grow"><h2>{c.name}</h2><small className="muted">{c.groups.length} group{c.groups.length === 1 ? '' : 's'} · {c.members} members</small></div>{admin ? <button className="plus-sq" onClick={() => setDlg('link')} aria-label="Add group"><Icon name="plus" size={22} stroke={2.4} /></button> : null}</header>
+        <header className="comm-head">{layout !== 'desktop' ? <button className="icon-btn" onClick={() => back()} aria-label="Back"><Icon name="back" /></button> : null}<div className="grow"><h2>{c.name}</h2><small className="muted">{c.groups.length} group{c.groups.length === 1 ? '' : 's'} · {c.members} member{c.members === 1 ? '' : 's'}</small></div>{admin ? <button className="plus-sq" onClick={() => setDlg('link')} aria-label="Add group"><Icon name="plus" size={22} stroke={2.4} /></button> : null}</header>
         <div className="comm-scroll">
           {c.description ? <p className="about pad">{c.description}</p> : null}
           {c.announcementConversationId ? <button className="comm-group" onClick={() => go(`chats/${c.announcementConversationId}`)}><span className="tile sm ann"><Icon name="megaphone" size={20} /></span><span className="grow"><b>Announcements</b><small className="muted" style={{ display: 'block' }}>{admin ? 'Only admins can post' : 'Updates from community admins'}</small></span><Icon name="right" size={16} className="muted" /></button> : null}
@@ -65,7 +65,7 @@ export function CommunityDetail({ id }: { id: string }) {
         </div>
       </div>
       <aside className="comm-side">
-        <div className="comm-cover" style={cover ? { backgroundImage: `linear-gradient(transparent 35%, rgba(0,0,0,.65)), url(${cover.url})` } : undefined}><div><b>{c.name}</b><small>{c.groups.length} groups · {c.members} members</small></div></div>
+        <div className="comm-cover" style={cover ? { backgroundImage: `linear-gradient(transparent 35%, rgba(0,0,0,.65)), url(${cover.url})` } : undefined}><div><b>{c.name}</b><small>{c.groups.length} group{c.groups.length === 1 ? '' : 's'} · {c.members} member{c.members === 1 ? '' : 's'}</small></div></div>
         <div className="quick-actions">
           <button onClick={() => (admin ? setDlg('invite') : toast('Ask an admin for an invite link'))}><span><Icon name="user-plus" size={20} /></span>Add</button>
           <button onClick={() => c.announcementConversationId && go(`chats/${c.announcementConversationId}`)}><span><Icon name="megaphone" size={20} /></span>Announce</button>
@@ -76,7 +76,7 @@ export function CommunityDetail({ id }: { id: string }) {
       {dlg === 'invite' ? <CommunityInvite id={c.id} onClose={() => setDlg(null)} /> : null}
       {dlg === 'link' ? <LinkGroup id={c.id} onClose={() => { setDlg(null); void load(); }} /> : null}
       <span hidden>{me.id}</span>
-    </div>
+    </div></div>
   );
 }
 function CommunityInvite({ id, onClose }: { id: string; onClose: () => void }) {

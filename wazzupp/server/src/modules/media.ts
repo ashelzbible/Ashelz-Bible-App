@@ -88,8 +88,9 @@ export async function mediaRoutes(app: FastifyInstance) {
     if (!buf.length) throw badRequest('empty_file');
     if (used.n + buf.length > config.storageQuotaBytes) throw new HttpError(413, 'quota_exceeded', 'Storage quota exceeded');
 
+    // eslint-disable-next-line no-control-regex
     const name = (part.filename || 'file').replace(/[\\/\u0000-\u001f]/g, '_').slice(0, 200);
-    let sniff = await fileTypeFromBuffer(buf);
+    const sniff = await fileTypeFromBuffer(buf);
     let mime = (sniff?.mime ?? '').split(';')[0].trim();
     if (!mime && kindField === 'document' && !buf.subarray(0, 4096).includes(0)) mime = 'text/plain'; // plain text has no magic bytes
     if (mime === 'video/webm' && (kindField === 'voice' || kindField === 'audio')) mime = 'audio/webm';
@@ -100,7 +101,7 @@ export async function mediaRoutes(app: FastifyInstance) {
     const id = randomUUID();
     const key = `${req.auth.userId.slice(0, 2)}/${req.auth.userId}/${id}`;
     let width: number | null = null, height: number | null = null, thumbKey: string | null = null;
-    let payload = buf; let finalMime = mime;
+    let payload = buf; const finalMime = mime;
     if (IMAGE.has(mime)) {
       try {
         const img = sharp(buf, { limitInputPixels: 80_000_000, animated: false });

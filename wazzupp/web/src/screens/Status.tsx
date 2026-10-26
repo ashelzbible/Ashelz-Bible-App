@@ -61,7 +61,7 @@ function Slide({ item, paused, onDone, onProgress }: { item: StatusItem; paused:
     if (item.kind === 'video') return;
     const tick = (t: number) => { const dt = t - last.current; last.current = t; if (!paused && (item.kind === 'text' || m)) acc.current += dt; onProgress(Math.min(1, acc.current / DUR)); if (acc.current >= DUR) { onDone(); return; } raf.current = requestAnimationFrame(tick); };
     raf.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf.current);
-  }, [item.id, paused, !!m]); // eslint-disable-line
+  }, [item.id, paused, !!m]);  
   useEffect(() => { const v = video.current; if (!v) return; if (paused) v.pause(); else void v.play().catch(() => {}); }, [paused]);
   if (item.kind === 'text') return <div className="slide text" style={{ background: item.background ?? BGS[0] }}><p>{item.body}</p></div>;
   if (!m) return <div className="slide"><div className="spinner" style={{ borderTopColor: '#fff' }} /></div>;
@@ -77,8 +77,8 @@ export function StatusViewer({ userId }: { userId: string }) {
   const menu = useMenu();
   useEffect(() => { setI(0); }, [userId]);
   const item = group?.items[i];
-  useEffect(() => { if (item && !isMine && !item.viewed) { api.post(`/api/status/${item.id}/view`).catch(() => {}); } }, [item?.id]); // eslint-disable-line
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'ArrowRight') next(); if (e.key === 'ArrowLeft') prev(); if (e.key === 'Escape') close(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }); // eslint-disable-line
+  useEffect(() => { if (item && !isMine && !item.viewed) { api.post(`/api/status/${item.id}/view`).catch(() => {}); } }, [item?.id]);  
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'ArrowRight') next(); if (e.key === 'ArrowLeft') prev(); if (e.key === 'Escape') close(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); });  
   if (!group || !item) return <div className="conv-empty dark"><Empty icon="dashed" title="Status unavailable" text="This update has expired or is no longer shared with you." action={<button className="btn btn-soft" onClick={() => go('status')}>Back</button>} /></div>;
   const idx = feed.findIndex((g) => g.userId === userId);
   const close = () => { void loadStatus(); if (layout === 'mobile') back(); else go('status'); };

@@ -308,7 +308,7 @@ describe('administration and trust & safety', () => {
     const adm = await admin();
     await q(`insert into background_jobs(kind, payload, max_attempts) values ('does_not_exist', '{}', 2)`);
     await runDueJobs();
-    let j = (await q(`select state, attempts, run_at > now() backoff from background_jobs where kind = 'does_not_exist'`)).rows[0];
+    const j = (await q(`select state, attempts, run_at > now() backoff from background_jobs where kind = 'does_not_exist'`)).rows[0];
     assert.equal(j.state, 'queued'); assert.equal(j.attempts, 1); assert.equal(j.backoff, true);
     await q(`update background_jobs set run_at = now() where kind = 'does_not_exist'`); await runDueJobs();
     assert.equal((await q(`select state from background_jobs where kind = 'does_not_exist'`)).rows[0].state, 'failed');

@@ -123,7 +123,7 @@ export async function resyncOpenThreads() {
 }
 
 // ---------------------------------------------------------------- reading
-let readTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const readTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 export function markRead(convId: string) {
   const c = getState().convs[convId]; if (!c) return;
   const seq = c.lastSeq;
