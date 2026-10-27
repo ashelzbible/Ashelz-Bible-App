@@ -57,7 +57,7 @@
   --sh-pop: 0 10px 40px rgba(6, 30, 26, .22), 0 2px 8px rgba(6, 30, 26, .10);
 
   --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-pill: 999px;
-  --font: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'San Francisco', Roboto, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /* native: Roboto on Android, San Francisco on iOS/macOS, Segoe UI on Windows */
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /* Roboto is bundled with the app (no external font host) */ /* native: Roboto on Android, San Francisco on iOS/macOS, Segoe UI on Windows */
   --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;
   --fs: 1;
   --safe-top: env(safe-area-inset-top, 0px);
