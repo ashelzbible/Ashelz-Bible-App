@@ -17,13 +17,20 @@ const GENRES = ['Pop', 'Hip-Hop/Rap', 'Soul/R&B', 'Gospel', 'Rock', 'Afro', 'Dan
  * (that they have the right to use) and tag them with a mood and genre; those tags drive the Mood and Genre tabs.
  */
 /** Hosts a catalogue track's audio and artwork may come from. Statuses only accept URLs on these. */
+/** Songs shipped with the app (files in web/public/music). Only add music here that Wazzupp has the right to distribute. */
+export const BUILTIN_TRACKS = [
+  { id: 'wz-music-1', title: 'Music 1', artist: 'Wazzupp', album: '', artUrl: null as string | null, previewUrl: '/music/music-1.mp3', durationMs: 22750, license: null as string | null, shareUrl: null as string | null },
+];
+export const isBuiltinUrl = (u: string) => BUILTIN_TRACKS.some((t) => t.previewUrl === u);
+
 export const CATALOG_HOST = /^https:\/\/([a-z0-9-]+\.)*jamendo\.com\//i;
 
 export async function musicRoutes(app: FastifyInstance) {
   // Search the licensed catalogue (Jamendo: Creative Commons music with a free API). The API key stays on the server.
   app.get('/api/music/catalog', { preHandler: authenticateVerified }, async (req) => {
     const f = parse(z.object({ q: z.string().trim().max(100).default('') }), req.query);
-    if (!config.jamendoClientId) return { configured: false, results: [] };
+    const own = BUILTIN_TRACKS.filter((t) => !f.q || `${t.title} ${t.artist}`.toLowerCase().includes(f.q.toLowerCase()));
+    if (!config.jamendoClientId) return { configured: own.length > 0 || BUILTIN_TRACKS.length > 0, results: own };
     await rateLimit(`catalog:${req.auth.userId}`, 60, 60);
     const u = new URL('https://api.jamendo.com/v3.0/tracks/');
     u.search = new URLSearchParams({ client_id: config.jamendoClientId, format: 'json', limit: '30', imagesize: '200', audioformat: 'mp32', ccnc: 'false', include: 'licenses',
@@ -36,7 +43,7 @@ export async function musicRoutes(app: FastifyInstance) {
       .filter((r: any) => typeof r.audio === 'string' && CATALOG_HOST.test(r.audio))
       .map((r: any) => ({ id: String(r.id), title: String(r.name), artist: String(r.artist_name), album: String(r.album_name ?? ''), artUrl: CATALOG_HOST.test(r.image ?? '') ? r.image : null,
         previewUrl: r.audio, durationMs: Math.round(Number(r.duration ?? 0) * 1000) || null, license: r.license_ccurl || null, shareUrl: r.shareurl || null }));
-    return { configured: true, results };
+    return { configured: true, results: [...own, ...results] };
   });
 
   app.get('/api/music', { preHandler: authenticateVerified }, async (req) => {

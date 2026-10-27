@@ -172,7 +172,7 @@ describe('licensed music catalogue', () => {
     }) as typeof fetch;
     const a = await newUser(ctx, 'catalog'); const f = await newUser(ctx, 'catfriend'); await a.put(`/api/contacts/${f.user.id}`, {});
     const r = (await a.get('/api/music/catalog?q=easy')).body;
-    assert.equal(r.configured, true); assert.equal(r.results.length, 1, 'tracks from other hosts are dropped'); assert.equal(r.results[0].title, 'Easy'); assert.equal(r.results[0].durationMs, 120000);
+    assert.equal(r.configured, true); assert.equal(r.results.length, 1, 'tracks from other hosts are dropped, and the built-in song does not match "easy"'); assert.equal(r.results[0].title, 'Easy'); assert.equal(r.results[0].durationMs, 120000);
     assert.match(asked, /search=easy/); assert.doesNotMatch(JSON.stringify(r), /test-id/, 'the API key never reaches the browser');
     const img = await a.upload(PNG, 'p.png', 'image');
     const bad = await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: 'https://evil.example.com/a.mp3' }); assert.equal(bad.status, 400);
@@ -181,6 +181,8 @@ describe('licensed music catalogue', () => {
     const item = (await f.get('/api/status')).body.feed[0].items[0];
     assert.equal(item.audioUrl, r.results[0].previewUrl); assert.equal(item.audioTitle, 'Easy · Someone');
     (config as any).jamendoClientId = '';
-    assert.equal((await a.get('/api/music/catalog')).body.configured, false);
+    const own = (await a.get('/api/music/catalog')).body; assert.deepEqual(own.results.map((t: any) => t.title), ['Music 1'], 'built-in songs are always offered');
+    assert.equal((await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: own.results[0].previewUrl, audioTitle: 'Music 1 · Wazzupp' })).status, 201, 'built-in songs work without Jamendo');
+    assert.equal((await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: '/music/not-a-song.mp3' })).status, 400);
   });
 });

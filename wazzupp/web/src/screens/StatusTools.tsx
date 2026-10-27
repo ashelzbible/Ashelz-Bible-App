@@ -212,6 +212,6 @@ function CatalogList({ cat, err, q, playing, setPlaying, audioRef, onPick, onRet
         <span className="grow"><b className="truncate">{t.title}</b><small className="truncate">{t.artist}{t.durationMs ? ` · ${duration(t.durationMs / 1000)}` : ''}</small></span>
         <button className="mus-go" onClick={() => onPick(t)} aria-label={`Use ${t.title} by ${t.artist}`}><Icon name="send" size={20} /></button>
       </div>))}
-    <p className="mus-credit">Music from <a href="https://www.jamendo.com" target="_blank" rel="noopener noreferrer">Jamendo</a>. Each track is shared under its own Creative Commons licence.</p>
+    <p className="mus-credit">Songs marked Wazzupp are built in. Others come from <a href="https://www.jamendo.com" target="_blank" rel="noopener noreferrer">Jamendo</a> and keep their own Creative Commons licence.</p>
   </>;
 }

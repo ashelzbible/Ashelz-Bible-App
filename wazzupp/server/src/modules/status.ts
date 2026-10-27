@@ -9,7 +9,7 @@ import { withDefaults } from '../lib/settings.ts';
 import { sendMessage } from './messages.ts';
 import { randomUUID } from 'node:crypto';
 import { removeMediaIfUnreferenced } from './media.ts';
-import { CATALOG_HOST } from './music.ts';
+import { CATALOG_HOST, isBuiltinUrl } from './music.ts';
 
 const uuid = z.string().uuid();
 
@@ -24,7 +24,7 @@ export async function statusRoutes(app: FastifyInstance) {
   app.post('/api/status', { preHandler: authenticateVerified }, async (req, reply) => {
     const b = parse(z.object({
       kind: z.enum(['text', 'image', 'video', 'voice']), font: z.number().int().min(0).max(7).default(0), body: z.string().max(700).default(''), caption: z.string().max(700).default(''), background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-      mediaId: uuid.nullish(), audioMediaId: uuid.nullish(), audioTitle: z.string().max(200).default(''), audioUrl: z.string().url().max(600).nullish(), audioArt: z.string().url().max(600).nullish(), audioCredit: z.string().url().max(600).nullish(), audience: z.enum(['contacts', 'except', 'only']).optional(), audienceIds: z.array(uuid).max(500).default([]),
+      mediaId: uuid.nullish(), audioMediaId: uuid.nullish(), audioTitle: z.string().max(200).default(''), audioUrl: z.string().max(600).refine((u) => u.startsWith('/') || /^https:\/\//.test(u), 'bad url').nullish(), audioArt: z.string().url().max(600).nullish(), audioCredit: z.string().url().max(600).nullish(), audience: z.enum(['contacts', 'except', 'only']).optional(), audienceIds: z.array(uuid).max(500).default([]),
     }), req.body);
     const me = req.auth.userId;
     await rateLimit(`status:${me}`, 30, 3600);
@@ -43,7 +43,8 @@ export async function statusRoutes(app: FastifyInstance) {
     }
     if (b.audioUrl) {
       if (b.kind !== 'image' && b.kind !== 'video') throw badRequest('audio_needs_media', 'Music can be added to photo and video updates');
-      if (b.audioMediaId || !config.jamendoClientId || !CATALOG_HOST.test(b.audioUrl) || (b.audioArt && !CATALOG_HOST.test(b.audioArt)) || (b.audioCredit && !CATALOG_HOST.test(b.audioCredit))) throw badRequest('invalid_audio', 'That song is not available');
+      const builtin = isBuiltinUrl(b.audioUrl);
+      if (b.audioMediaId || (!builtin && (!config.jamendoClientId || !CATALOG_HOST.test(b.audioUrl))) || (b.audioArt && !CATALOG_HOST.test(b.audioArt)) || (b.audioCredit && !CATALOG_HOST.test(b.audioCredit))) throw badRequest('invalid_audio', 'That song is not available');
     }
     if (b.audioMediaId) {
       if (b.kind !== 'image' && b.kind !== 'video') throw badRequest('audio_needs_media', 'Music can be added to photo and video updates');
