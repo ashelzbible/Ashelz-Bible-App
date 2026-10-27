@@ -151,9 +151,14 @@ export function StatusViewer({ userId }: { userId: string }) {
       {item.kind !== 'text' && item.kind !== 'voice' && item.caption ? <p className="story-cap">{item.caption}</p> : null}
       <div className="story-foot" onPointerDown={(e) => e.stopPropagation()}>
         {isMine ? <button className="viewed-by" onClick={() => setViewers(true)}><Icon name="eye" size={18} />{mineItem?.viewers?.length ?? 0} {(mineItem?.viewers?.length ?? 0) === 1 ? 'view' : 'views'}</button>
-          : <form className="story-reply" onSubmit={async (e) => { e.preventDefault(); if (!reply.trim()) return; const r = await guard(api.post(`/api/status/${item.id}/reply`, { body: reply.trim() })); if (r) { setReply(''); toast('Reply sent'); } }}>
+          : <form className="story-reply" onSubmit={async (e) => { e.preventDefault(); if (!reply.trim()) return; const r = await guard(api.post(`/api/status/${item.id}/reply`, { body: reply.trim() })); if (r) { setReply(''); toast('Reply sent', undefined, { label: 'Open chat', run: () => go(`chats/${r.conversationId}`) }); } }}>
             <input placeholder="Reply…" value={reply} onChange={(e) => setReply(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} aria-label="Reply to status" />
-            {['❤️', '😂', '🔥', '👏'].map((em) => <button type="button" key={em} className={item.reaction === em ? 'on' : ''} onClick={async () => { await guard(api.post(`/api/status/${item.id}/react`, { emoji: em })); void loadStatus(); }} aria-label={`React ${em}`}>{em}</button>)}</form>}
+            {['❤️', '😂', '😮', '😢', '🙏', '👍'].map((em) => <button type="button" key={em} className={item.reaction === em ? 'on' : ''} aria-label={`React ${em}`}
+              onClick={async () => { // like the phone apps: the emoji goes straight to their chat, on top of a card showing the status, and is also recorded as a reaction
+                const r = await guard(api.post(`/api/status/${item.id}/reply`, { body: em })); if (!r) return;
+                await api.post(`/api/status/${item.id}/react`, { emoji: em }).catch(() => {}); void loadStatus();
+                toast(`Sent ${em}`, undefined, { label: 'Open chat', run: () => go(`chats/${r.conversationId}`) });
+              }}>{em}</button>)}</form>}
       </div>
       {viewers ? <Dialog title={`Viewed by ${mineItem?.viewers?.length ?? 0}`} onClose={() => setViewers(false)}>
         {(mineItem?.viewers ?? []).length ? <ul className="stack-sm">{mineItem.viewers.map((v: any) => <li key={v.userId} className="row"><Avatar id={v.userId} name={v.displayName} size={40} /><span className="grow"><b>{v.displayName}</b><small className="muted" style={{ display: 'block' }}>{new Date(v.viewedAt).getTime() > 1000 ? ago(v.viewedAt) : 'Viewed'}</small></span>{v.reaction ? <span style={{ fontSize: 22 }}>{v.reaction}</span> : null}</li>)}</ul> : <p className="muted">No views yet.</p>}
