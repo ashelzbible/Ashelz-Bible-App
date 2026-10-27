@@ -47,6 +47,7 @@ export const config = {
     turn: (env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     turnSecret: env.TURN_SECRET || '',
   },
+  iceApi: { url: env.ICE_API_URL || '', token: env.ICE_API_TOKEN || '', ttlSeconds: Number(env.ICE_API_TTL ?? 86400) },
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
   // Test deployments only: accept short, common passwords. Leave unset for a real launch.
   relaxedPasswords: env.RELAXED_PASSWORDS === 'true',

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Client, Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
 import { config } from '../src/config.ts';
+import { refreshProviderIce } from '../src/lib/ice.ts';
 
 let ctx: Ctx;
 before(async () => { ctx = await start(); });
@@ -121,5 +122,26 @@ describe('sign in with Google', () => {
     (config as any).googleClientId = '';
     assert.equal((await new Client(ctx).post('/api/auth/google', { credential: tok(claims()) })).status, 400);
     (config as any).googleClientId = CLIENT;
+  });
+});
+
+describe('TURN credentials from a provider API', () => {
+  it('fetches Cloudflare-style ICE servers server-side and hands them to signed-in users', async () => {
+    const realFetch = globalThis.fetch; let seen: any = null;
+    (config as any).iceApi = { url: 'https://rtc.example.test/v1/turn/keys/K/credentials/generate-ice-servers', token: 'secret-token', ttlSeconds: 86400 };
+    globalThis.fetch = (async (url: any, init?: any) => {
+      if (String(url).startsWith('https://rtc.example.test/')) { seen = init; return new Response(JSON.stringify({ iceServers: [{ urls: ['stun:stun.example.test:3478'] }, { urls: ['turn:turn.example.test:3478?transport=udp', 'turn:turn.example.test:53?transport=udp', 'turns:turn.example.test:443?transport=tcp'], username: 'u1', credential: 'c1' }] }), { status: 201 }); }
+      return realFetch(url, init);
+    }) as typeof fetch;
+    try {
+      await refreshProviderIce();
+      assert.equal(seen.method, 'POST'); assert.equal(seen.headers.authorization, 'Bearer secret-token'); assert.equal(JSON.parse(seen.body).ttl, 86400);
+      const a = await newUser(ctx, 'ice');
+      const r = (await a.get('/api/calls/ice')).body;
+      assert.equal(r.turnConfigured, true);
+      const turn = r.iceServers.find((s: any) => s.username === 'u1');
+      assert.deepEqual(turn.urls, ['turn:turn.example.test:3478?transport=udp', 'turns:turn.example.test:443?transport=tcp'], 'port 53 is dropped');
+      assert.equal(turn.credential, 'c1');
+    } finally { globalThis.fetch = realFetch; (config as any).iceApi = { url: '', token: '', ttlSeconds: 86400 }; await refreshProviderIce(); }
   });
 });

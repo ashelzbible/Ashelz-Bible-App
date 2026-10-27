@@ -5,6 +5,7 @@ import { one, q, tx } from '../db/pool.ts';
 import type { Tx } from '../db/pool.ts';
 import { authenticateVerified, parse } from '../lib/http.ts';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.ts';
+import { providerHasTurn, providerIce } from '../lib/ice.ts';
 import { config } from '../config.ts';
 import { hub } from '../lib/hub.ts';
 import { activeMemberIds, requireMember } from '../lib/conv.ts';
@@ -32,6 +33,7 @@ export function iceServers(userId: string) {
     const username = `${Math.floor(Date.now() / 1000) + 3600}:${userId}`;
     servers.push({ urls: config.ice.turn, username, credential: createHmac('sha1', config.ice.turnSecret).update(username).digest('base64') });
   }
+  servers.push(...providerIce());
   return servers;
 }
 
@@ -144,7 +146,7 @@ export async function relaySignal(userId: string, callId: string, signal: unknow
 }
 
 export async function callRoutes(app: FastifyInstance) {
-  app.get('/api/calls/ice', { preHandler: authenticateVerified }, async (req) => ({ iceServers: iceServers(req.auth.userId), ttlSeconds: 3600, turnConfigured: !!(config.ice.turn.length && config.ice.turnSecret) }));
+  app.get('/api/calls/ice', { preHandler: authenticateVerified }, async (req) => ({ iceServers: iceServers(req.auth.userId), ttlSeconds: 3600, turnConfigured: !!(config.ice.turn.length && config.ice.turnSecret) || providerHasTurn() }));
   app.post('/api/calls', { preHandler: authenticateVerified }, async (req, reply) => {
     const b = parse(z.object({ conversationId: z.string().uuid(), kind: z.enum(['audio', 'video']) }), req.body);
     const call = await startCall(req.auth.userId, b.conversationId, b.kind);

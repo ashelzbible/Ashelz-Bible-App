@@ -1,3 +1,4 @@
+import { startIceRefresh } from './lib/ice.ts';
 import { Redis } from 'ioredis';
 import { buildApp } from './app.ts';
 import { config } from './config.ts';
@@ -15,6 +16,7 @@ async function main() {
   setPublisher((events) => hub.send(events.map((e) => ({ userId: e.userId, msg: { t: 'event', id: e.id, type: e.type, payload: e.payload } }))));
 
   const app = await buildApp();
+  startIceRefresh();
   await app.listen({ port: config.port, host: config.host });
   const ws = attachWebSocket(app.server);
   if (process.env.DISABLE_WORKER !== 'true') startWorker();

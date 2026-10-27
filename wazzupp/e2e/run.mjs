@@ -150,7 +150,7 @@ describe('browser end to end', () => {
   it('keeps a second device in sync (read state, new messages)', async () => {
     const b2 = await ctxFor('b2');
     await b2.page.goto(BASE);
-    await b2.page.getByLabel('Email, phone or username').fill('e2e_bob'); await b2.page.getByLabel('Password').fill(PW);
+    await b2.page.getByLabel('Email or username').fill('e2e_bob'); await b2.page.getByLabel('Password').fill(PW);
     await b2.page.getByRole('button', { name: 'Sign in' }).click();
     await b2.page.locator('.app').waitFor();
     await send(a.page, 'for both of bobs devices');

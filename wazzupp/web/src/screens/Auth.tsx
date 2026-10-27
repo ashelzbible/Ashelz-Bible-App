@@ -91,7 +91,7 @@ export function AuthScreen() {
     <Shell title={titles[mode][0]} sub={titles[mode][1]}>
       <form className="auth-fields" onSubmit={submit} noValidate>
         {mode === 'login' && <>
-          <Field label="Email, phone or username"><input className="input" autoComplete="username" autoFocus value={f.identifier} onChange={set('identifier')} required /></Field>
+          <Field label="Email or username"><input className="input" autoComplete="username" autoFocus value={f.identifier} onChange={set('identifier')} required /></Field>
           <Field label="Password"><input className="input" type="password" autoComplete="current-password" value={f.password} onChange={set('password')} required /></Field>
           {needMfa && <Field label="Authenticator code"><input className="input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus value={f.mfaCode} onChange={set('mfaCode')} placeholder="6-digit code" /></Field>}
         </>}
@@ -99,7 +99,7 @@ export function AuthScreen() {
           <Field label="Your name"><input className="input" autoComplete="name" autoFocus value={f.displayName} onChange={set('displayName')} required /></Field>
           <Field label="Username"><input className="input" autoComplete="off" autoCapitalize="none" value={f.username} onChange={set('username')} placeholder="letters, numbers, . or _" required /></Field>
           <Field label="Email"><input className="input" type="email" autoComplete="email" value={f.email} onChange={set('email')} /></Field>
-          <Field label="Phone (optional, international format)"><input className="input" type="tel" autoComplete="tel" value={f.phone} onChange={set('phone')} placeholder="+27821234567" /></Field>
+          <Field label="Phone (optional, not verified)"><input className="input" type="tel" autoComplete="tel" value={f.phone} onChange={set('phone')} placeholder="+27821234567 (optional, not verified)" /></Field>
           <Field label="Password"><input className="input" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} placeholder="Choose a password" required /></Field>
         </>}
         {mode === 'forgot' && <Field label="Email"><input className="input" type="email" autoFocus autoComplete="email" value={f.email} onChange={set('email')} required /></Field>}

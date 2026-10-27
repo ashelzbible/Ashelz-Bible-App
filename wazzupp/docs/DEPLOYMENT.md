@@ -18,6 +18,7 @@
 | `ANTHROPIC_API_KEY` | optional AI drafting (also needs the `ai_tools` flag) |
 | `GOOGLE_CLIENT_ID` | enables "Continue with Google" (OAuth web client ID; add your site's address under Authorised JavaScript origins). Tokens are verified server-side with Google |
 | `RELAXED_PASSWORDS` | test deployments only: accept any password of 4+ characters |
+| `ICE_API_URL`, `ICE_API_TOKEN` | fetch TURN credentials from a provider (Cloudflare, Metered); see docs/CALLS.md |
 | `TENOR_API_KEY` | optional GIF search (proxied through the server; off if unset) |
 | `ADMIN_EMAILS` | emails that become `admin` on registration (bootstrap) |
 | `PORT`, `HOST` | listen address |

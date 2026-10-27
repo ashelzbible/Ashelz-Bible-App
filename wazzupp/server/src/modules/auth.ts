@@ -135,6 +135,7 @@ export async function authRoutes(app: FastifyInstance) {
       email: email.optional(), phone: phone.optional(), ...deviceInfo,
     }), req.body);
     if (!body.email && !body.phone) throw badRequest('validation_failed', 'email or phone required');
+    if (config.requireVerification && !body.email) throw badRequest('email_required', 'An email address is required so we can verify your account');
     await rateLimit(`reg:${clientIp(req)}`, 10, 3600);
     const open = await one(`select enabled from feature_flags where key = 'registration_open'`);
     if (open && !open.enabled) throw forbidden('registration_closed');
@@ -157,7 +158,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
     if (config.adminEmails.includes(body.email ?? '')) await q(`update users set role = 'admin' where id = $1`, [userId]);
     if (body.email) await issueCode(userId, 'verify_email', body.email, 'email', 'Verify your Wazzupp email');
-    if (body.phone) await issueCode(userId, 'verify_phone', body.phone, 'sms', 'Wazzupp verification');
+    // Phone numbers are stored as an unverified contact detail: sending SMS codes needs a paid provider, so none is sent.
     const sess = await createSession(userId, body, req);
     reply.code(201);
     return { token: sess.token, deviceId: sess.deviceId, user: await loadSelf(userId) };
@@ -188,15 +189,15 @@ export async function authRoutes(app: FastifyInstance) {
     await rateLimit(`login-ip:${clientIp(req)}`, 30, 600);
     await rateLimit(`login-id:${id}`, 10, 600);
     const u = await one(
-      `select id, password_hash, status, failed_logins, locked_until, mfa_enabled, mfa_secret from users where email = $1 or lower(username) = $1 or phone = $2`,
+      `select id, password_hash, status, failed_logins, locked_until, mfa_enabled, mfa_secret from users where email = $1 or lower(username) = $1 or (phone = $2 and phone_verified_at is not null)`,
       [id, body.identifier.trim()]);
     // Always run a hash verification so timing does not reveal whether the account exists.
     const ok = await verifyPassword(u?.password_hash ?? '$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHRzb21lc2FsdA$Zm9vYmFyYmF6cXV4Zm9vYmFyYmF6cXV4Zm9vYmFyYmE', body.password);
-    if (!u || u.status === 'deleted') throw unauthorized('invalid_credentials', 'Incorrect login details');
+    if (!u || u.status === 'deleted') throw unauthorized('invalid_credentials', 'Incorrect login details. Check your username, email or password.');
     if (u.locked_until && u.locked_until > new Date()) throw unauthorized('account_locked', 'Too many failed attempts. Try again later.');
     if (!ok) {
       await q(`update users set failed_logins = failed_logins + 1, locked_until = case when failed_logins + 1 >= 5 then now() + interval '15 minutes' else locked_until end where id = $1`, [u.id]);
-      throw unauthorized('invalid_credentials', 'Incorrect login details');
+      throw unauthorized('invalid_credentials', 'Incorrect login details. Check your username, email or password.');
     }
     if (u.status === 'suspended') throw forbidden('account_suspended', 'This account is suspended. You can submit an appeal.');
     if (u.mfa_enabled) {

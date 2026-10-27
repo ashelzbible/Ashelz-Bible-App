@@ -50,10 +50,14 @@ describe('registration and verification', () => {
   it('registers with a phone number (international format only)', async () => {
     const c = new Client(ctx);
     assert.equal((await c.post('/api/auth/register', { username: 'phoney', password: 'correct-horse-battery', displayName: 'P', phone: '0821234567' })).status, 400);
-    const ok = await c.post('/api/auth/register', { username: 'phoney', password: 'correct-horse-battery', displayName: 'P', phone: '+27821234567' });
-    assert.equal(ok.status, 201);
+    assert.equal((await c.post('/api/auth/register', { username: 'phoney', password: 'correct-horse-battery', displayName: 'P', phone: '+27821234567' })).status, 400, 'phone alone cannot be verified, so an email is required');
+    const ok = await c.post('/api/auth/register', { username: 'phoney', password: 'correct-horse-battery', displayName: 'P', phone: '+27821234567', email: 'phoney@example.com' });
+    assert.equal(ok.status, 201); assert.equal(ok.body.user.phoneVerified, false);
     const sms = (await q(`select channel from outbox where user_id = $1`, [ok.body.user.id])).rows;
-    assert.equal(sms[0].channel, 'sms');
+    assert.deepEqual(sms.map((r: any) => r.channel), ['email'], 'no SMS code is sent');
+    // an unverified phone number cannot be used to sign in
+    const pl = await new Client(ctx).post('/api/auth/login', { identifier: '+27821234567', password: 'correct-horse-battery' });
+    assert.equal(pl.status, 401);
   });
 });
 

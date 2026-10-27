@@ -406,7 +406,7 @@ describe('key directory and misc', () => {
     const a = await newUser(ctx, 'a');
     const hide = new Client(ctx), show = new Client(ctx);
     for (const [c, ph, nm] of [[hide, '+27820000001', 'hide'], [show, '+27820000002', 'show']] as const) {
-      const r = await c.post('/api/auth/register', { username: 'sync_' + nm, password: 'correct-horse-battery', displayName: nm, phone: ph });
+      const r = await c.post('/api/auth/register', { username: 'sync_' + nm, password: 'correct-horse-battery', displayName: nm, phone: ph, email: `sync_${nm}@example.com` });
       c.token = r.body.token; c.user = r.body.user;
       await q(`update users set phone_verified_at = now() where id = $1`, [c.user.id]);
     }
