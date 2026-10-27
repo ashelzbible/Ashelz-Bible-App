@@ -308,3 +308,11 @@ body[data-wallpaper='plain'] .wallpaper { background-image: none; }
 .app.mobile .conv-time { font-size: calc(14px * var(--fs)); font-weight: 500; }
 .app.mobile .conv-main { gap: 1px; }
 .bottom-nav button { font-size: calc(16px * var(--fs)); font-weight: 500; gap: 2px; } .bottom-nav button.active { font-weight: 700; }
+
+/* chat list typography, refined (Roboto 18/500 name, 15/400 preview, 13/500 time, 15/500 tabs, 17/400 search) */
+.app.mobile .conv-name { font-size: calc(18px * var(--fs)); line-height: calc(22px * var(--fs)); font-weight: 500; color: #111B21; }
+.app.mobile .conv-prev { font-size: calc(15px * var(--fs)); line-height: calc(20px * var(--fs)); font-weight: 400; color: #667781; }
+.app.mobile .conv-time { font-size: calc(13px * var(--fs)); line-height: calc(18px * var(--fs)); font-weight: 500; color: #667781; } .app.mobile .conv-time.unread { color: var(--accent-deep); }
+.bottom-nav button { font-size: calc(15px * var(--fs)); line-height: calc(20px * var(--fs)); font-weight: 500; color: #111B21; } .bottom-nav button.active { font-weight: 600; }
+.m-search input, .rail-search input { font-size: calc(17px * var(--fs)); font-weight: 400; } .m-search input::placeholder, .rail-search input::placeholder { color: #667781; }
+:root[data-theme='dark'] .app.mobile .conv-name, :root[data-theme='dark'] .bottom-nav button { color: var(--text); } :root[data-theme='dark'] .app.mobile .conv-prev, :root[data-theme='dark'] .app.mobile .conv-time { color: var(--text-2); }
