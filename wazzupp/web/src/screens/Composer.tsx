@@ -237,7 +237,7 @@ function AttachSheet({ items, onClose }: { items: Array<[string, IconName, strin
   return (
     <Dialog title="Attach" onClose={onClose} width={480}>
       <div className="attach-grid">{items.map(([label, icon, color, fn, badge]) => (
-        <button key={label} className="attach-item" onClick={() => { onClose(); setTimeout(fn, 0); }}>
+        <button key={label} className="attach-item" onClick={() => { fn(); onClose(); }}>
           {badge ? <em className="attach-new">{badge}</em> : null}
           <span className="attach-ico" style={{ color }}><Icon name={icon} size={26} /></span><span>{label}</span>
         </button>))}</div>

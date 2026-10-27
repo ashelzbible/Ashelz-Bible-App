@@ -390,6 +390,20 @@ export function installDemoBackend() {
     return new Response(JSON.stringify({ error: { code: 'demo_unavailable', message: 'This feature needs the real server and is not part of the in-page demo.' } }), { status: 501, headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
   (window as any).WebSocket = FakeWS;
+  // uploads use XMLHttpRequest (for progress); route those through the same in-page backend
+  const RealXHR = window.XMLHttpRequest;
+  class FakeXHR {
+    upload: { onprogress: ((e: any) => void) | null } = { onprogress: null }; onload: (() => void) | null = null; onerror: (() => void) | null = null; onabort: (() => void) | null = null;
+    status = 0; responseText = ''; private m = 'GET'; private u = ''; private dead = false;
+    open(m: string, u: string) { this.m = m; this.u = u; } setRequestHeader() {}
+    abort() { this.dead = true; this.onabort?.(); }
+    send(body?: any) {
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 1 });
+      window.fetch(this.u, { method: this.m, body }).then(async (r) => { if (this.dead) return; this.status = r.status; this.responseText = await r.text(); this.onload?.(); }).catch(() => { if (!this.dead) this.onerror?.(); });
+    }
+  }
+  window.XMLHttpRequest = function () { return new FakeXHR() as any; } as any;
+  void RealXHR;
 }
 
 

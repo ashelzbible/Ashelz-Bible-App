@@ -1,7 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; font-size: calc(16px * var(--fs)); }
-:root[data-font='sm'] { --fs: .9375; }
-:root[data-font='lg'] { --fs: 1.125; }
+:root[data-font='sm'] { --fs: .875; }
+:root[data-font='lg'] { --fs: 1.1667; }
 html, body, #root { height: 100%; }
 body {
   margin: 0; font-family: var(--font); background: var(--bg-app); color: var(--text); font-size: 1rem; line-height: 1.4;
@@ -120,3 +120,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 :root[data-contrast='high'][data-theme='dark'] { --border: #5F7873; --text-2: #C3D2CE; --bubble-meta: #C3D2CE; }
 :root[data-contrast='high'] .bubble, :root[data-contrast='high'] .set-card, :root[data-contrast='high'] .info-card { border: 1px solid var(--border); }
 .toggle[aria-checked='true']::after { content: '✓'; font-size: 13px; font-weight: 800; color: var(--accent-deep); line-height: 20px; text-align: center; }
+
+/* Message text size follows each platform's own default body size (Medium): 14px on web/desktop, 16sp on Android, 17pt on iOS.
+   Small and Large scale it by roughly -12% / +17% through --fs. */
+:root { --msg-fs: calc(16px * var(--fs)); }
+@media (min-width: 700px) and (pointer: fine) { :root { --msg-fs: calc(14px * var(--fs)); } }
+@supports (-webkit-touch-callout: none) { :root { --msg-fs: calc(17px * var(--fs)); } }
