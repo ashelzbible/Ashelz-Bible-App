@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { boot, flushOutbox } from './lib/actions.ts';
 import { resumeActiveCall } from './lib/rtc.ts';
 import { useStore } from './lib/store.ts';
@@ -91,12 +91,14 @@ export function App() {
   useEffect(() => { void boot(); }, []);
   useEffect(() => { if (me) { applyAppearance(me.settings.appearance); void resumeActiveCall(); } }, [me?.id]);  
   useEffect(() => { const on = () => void flushOutbox(); window.addEventListener('online', on); return () => window.removeEventListener('online', on); }, []);
+  const [needVerify, setNeedVerify] = useState(true); // the server says whether verification is required
+  useEffect(() => { api.get('/api/auth/config').then((r) => setNeedVerify(r.requireVerification !== false)).catch(() => {}); }, []);
   const unread = useStore((s) => Object.values(s.convs).reduce((n, c) => n + (c.muted || c.archived ? 0 : c.unread), 0));
   useEffect(() => { document.title = unread ? `(${unread}) Wazzupp` : 'Wazzupp'; }, [unread]);
   let body;
   if (!booted) body = <div className="splash"><Logo size={96} /><div className="spinner" /></div>;
   else if (!me) body = <AuthScreen />;
-  else if (!me.emailVerified && !me.phoneVerified) body = <VerifyGate />;
+  else if (needVerify && !me.emailVerified && !me.phoneVerified) body = <VerifyGate />;
   else body = <><Main /><CallOverlay /></>;
   return <>{body}<Toasts /></>;
 }

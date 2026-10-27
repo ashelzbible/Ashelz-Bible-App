@@ -89,7 +89,7 @@ async function verifyGoogleToken(credential: string): Promise<{ email: string; n
 
 export async function authRoutes(app: FastifyInstance) {
   // What the sign-in screen needs to know before anyone is signed in.
-  app.get('/api/auth/config', async () => ({ googleClientId: config.googleClientId || null }));
+  app.get('/api/auth/config', async () => ({ googleClientId: config.googleClientId || null, requireVerification: config.requireVerification }));
 
   app.post('/api/auth/google', async (req, reply) => {
     if (!config.googleClientId) throw badRequest('google_not_configured', 'Sign in with Google is not set up on this server');
