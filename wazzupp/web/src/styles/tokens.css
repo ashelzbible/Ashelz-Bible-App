@@ -1,0 +1,93 @@
+/* Wazzupp design tokens. Brand values come straight from the brief; semantic tokens map them to roles. */
+:root {
+  /* Brand palette */
+  --wz-deep-emerald: #003B32;
+  --wz-dark-forest: #052E2B;
+  --wz-primary: #00A884;
+  --wz-mint: #25D9A0;
+  --wz-pale-mint: #D9FBEA;
+  --wz-white: #FFFFFF;
+  --wz-text: #111B21;
+  --wz-text-2: #667781;
+  --wz-bg: #F7F9F8;
+  --wz-dark-bg: #101817;
+  --wz-border: #DDE5E1;
+  --wz-bubble-in: #FFFFFF;
+  --wz-bubble-out: #D9FDD3;
+  --wz-danger: #E5484D;
+
+  /* Derived (measured from the reference): deeper green for small text/badges on white, tick blue, header green */
+  --wz-primary-deep: #00805F;
+  --wz-header-green: #0B4A3C;
+  --wz-tick: #2FA4DE;
+
+  /* Semantic */
+  --bg-app: var(--wz-bg);
+  --surface: var(--wz-white);
+  --surface-2: #F2F4F5;
+  --surface-hover: #EEF1F0;
+  --surface-sunken: #F0F3F2;
+  --text: var(--wz-text);
+  --text-2: var(--wz-text-2);
+  --text-on-accent: #fff;
+  --border: var(--wz-border);
+  --accent: var(--wz-primary);
+  --accent-deep: var(--wz-primary-deep);
+  --accent-soft: var(--wz-pale-mint);
+  --danger: var(--wz-danger);
+  --rail-bg: linear-gradient(180deg, #0B4038 0%, #08342F 52%, #0A2A2A 100%);
+  --rail-text: rgba(255, 255, 255, .78);
+  --rail-text-active: #fff;
+  --rail-active-bg: rgba(37, 217, 160, .16);
+  --rail-input-bg: rgba(255, 255, 255, .09);
+  --rail-input-text: rgba(255, 255, 255, .72);
+  --bubble-in: var(--wz-bubble-in);
+  --bubble-out: var(--wz-bubble-out);
+  --bubble-text: var(--wz-text);
+  --bubble-meta: #7C8B93;
+  --wallpaper-bg: #EAE4DE;
+  --wallpaper-ink: rgba(120, 100, 80, .11);
+  --header-mobile: var(--wz-header-green);
+  --overlay: rgba(6, 20, 18, .5);
+  --call-bg: radial-gradient(120% 90% at 50% 20%, #0F4A40 0%, #07312C 45%, #031917 100%);
+  --focus: 0 0 0 3px rgba(0, 168, 132, .35);
+
+  --sh-bubble: 0 1px 1px rgba(11, 20, 26, .10);
+  --sh-card: 0 1px 2px rgba(0, 59, 50, .06), 0 4px 14px rgba(0, 59, 50, .06);
+  --sh-pop: 0 10px 40px rgba(6, 30, 26, .22), 0 2px 8px rgba(6, 30, 26, .10);
+
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-pill: 999px;
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /* Roboto is bundled with the app (no external font host) */ /* native: Roboto on Android, San Francisco on iOS/macOS, Segoe UI on Windows */
+  --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;
+  --fs: 1;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+:root[data-theme='dark'] {
+  --bg-app: var(--wz-dark-bg);
+  --surface: #162321;
+  --surface-2: #1B2B28;
+  --surface-hover: #213330;
+  --surface-sunken: #121D1B;
+  --text: #E8F0EE;
+  --text-2: #8CA09B;
+  --border: #263836;
+  --accent-soft: #0E3A31;
+  --accent-deep: #25D9A0;
+  --rail-bg: linear-gradient(180deg, #052E2B 0%, #04231F 55%, #031A18 100%);
+  --bubble-in: #1F2F2C;
+  --bubble-out: #06493F;
+  --bubble-text: #E8F0EE;
+  --bubble-meta: #8FA7A1;
+  --wallpaper-bg: #0B1514;
+  --wallpaper-ink: rgba(255, 255, 255, .045);
+  --header-mobile: #052E2B;
+  --wz-tick: #53BDEB;
+  --sh-bubble: 0 1px 1px rgba(0, 0, 0, .35);
+  --sh-card: 0 1px 2px rgba(0, 0, 0, .3);
+  --sh-pop: 0 10px 40px rgba(0, 0, 0, .55);
+  --overlay: rgba(0, 0, 0, .62);
+  color-scheme: dark;
+}
