@@ -45,10 +45,10 @@ export const api = {
 };
 
 /** Upload with progress (fetch has no upload progress events). */
-export function uploadWithProgress(file: Blob, filename: string, kind: string, extra: Record<string, string>, onProgress: (p: number) => void): { promise: Promise<any>; abort: () => void } {
+export function uploadWithProgress(file: Blob, filename: string, kind: string, extra: Record<string, string>, onProgress: (p: number) => void, url = '/api/media'): { promise: Promise<any>; abort: () => void } {
   const xhr = new XMLHttpRequest();
   const promise = new Promise<any>((resolve, reject) => {
-    xhr.open('POST', '/api/media');
+    xhr.open('POST', url);
     if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     xhr.onload = () => {

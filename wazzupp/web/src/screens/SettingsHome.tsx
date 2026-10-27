@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { api } from '../lib/api.ts';
+import { api, uploadWithProgress } from '../lib/api.ts';
 import { APP_VERSION } from '../lib/version.ts';
 import { clock, convTitle } from '../lib/format.ts';
 import { back, go, useLayout, useRoute } from '../lib/route.ts';
@@ -215,7 +215,7 @@ export function MyMusicPage() {
   const [data, setData] = useState<{ tracks: Track[]; moods: string[]; genres: string[] } | null>(null);
   const [q, setQ] = useState(''); const [sel, setSel] = useState<Set<string> | null>(null); const [queue, setQueue] = useState<UploadItem[]>([]);
   const [edit, setEdit] = useState<Track | null>(null); const [bulk, setBulk] = useState(false); const [over, setOver] = useState(false);
-  const [playing, setPlaying] = useState<string | null>(null); const audio = useRef<HTMLAudioElement>(null); const pick = useRef<HTMLInputElement>(null);
+  const [playing, setPlaying] = useState<string | null>(null); const audio = useRef<HTMLAudioElement>(null); const pick = useRef<HTMLInputElement>(null); const album = useRef<HTMLInputElement>(null); const [albumFile, setAlbumFile] = useState<File | null>(null);
   const load = useCallback(() => api.get(`/api/music?tab=suggested&q=${encodeURIComponent(q.trim())}`).then(setData).catch(toastError), [q]);
   useEffect(() => { const t = setTimeout(() => void load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
   useEffect(() => { window.addEventListener(MUSIC_CHANGED, load); return () => window.removeEventListener(MUSIC_CHANGED, load); }, [load]); // another device changed the library
@@ -234,7 +234,8 @@ export function MyMusicPage() {
         <div className={`drop-zone ${over ? 'over' : ''}`}>
           <Icon name="music" size={30} /><b>Add songs to use in your status updates</b>
           <p className="muted">Pick as many files as you like, or drop them here. They sync automatically to all your devices. Only add music you have the right to share.</p>
-          <button className="btn btn-primary" onClick={() => pick.current?.click()}><Icon name="plus" size={18} />Add songs</button>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}><button className="btn btn-primary" onClick={() => pick.current?.click()}><Icon name="plus" size={18} />Add songs</button><button className="btn btn-soft" onClick={() => album.current?.click()}><Icon name="updates" size={18} />Split an album</button></div>
+          <input ref={album} type="file" hidden accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setAlbumFile(f); }} />
           <input ref={pick} type="file" multiple hidden accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; if (fs.length) void upload(fs); }} />
         </div>
         {queue.length ? <Section title={`Uploading ${queue.filter((i) => i.state === 'done').length} of ${queue.length}`}>{queue.map((i) => (
@@ -255,6 +256,7 @@ export function MyMusicPage() {
           </div>))}</Section>
         <audio ref={audio} onEnded={() => setPlaying(null)} />
       </div>
+      {albumFile ? <AlbumSplitter file={albumFile} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => { setAlbumFile(null); void load(); }} /> : null}
       {edit ? <EditSong t={edit} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void load(); }} /> : null}
       {bulk ? <BulkTags ids={[...(sel ?? [])]} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => setBulk(false)} onSaved={() => { setBulk(false); setSel(null); void load(); }} /> : null}
     </Page>
@@ -280,4 +282,72 @@ function BulkTags({ ids, moods, genres, onClose, onSaved }: { ids: string[]; moo
     <label className="field"><span className="label-t">Mood</span><select className="select" value={mood} onChange={(e) => setMood(e.target.value)}><option value="-">Leave as is</option><option value="">Clear</option>{moods.map((m) => <option key={m}>{m}</option>)}</select></label>
     <label className="field"><span className="label-t">Genre</span><select className="select" value={genre} onChange={(e) => setGenre(e.target.value)}><option value="-">Leave as is</option><option value="">Clear</option>{genres.map((g) => <option key={g}>{g}</option>)}</select></label>
   </Dialog>;
+}
+
+interface Seg { startMs: number; endMs: number; title: string }
+const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`;
+const parseMmss = (v: string) => { const m = v.trim().match(/^(\d+):([0-5]?\d)$/); return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 : null; };
+
+/** Upload one long recording, review the songs the server found (chapters or gaps of silence), fix them, then cut them into your library. */
+function AlbumSplitter({ file, moods, genres, onClose }: { file: File; moods: string[]; genres: string[]; onClose: () => void }) {
+  const [stage, setStage] = useState<'uploading' | 'review' | 'cutting' | 'done'>('uploading'); const [pct, setPct] = useState(0); const [err, setErr] = useState('');
+  const [info, setInfo] = useState<{ id: string; durationMs: number; album: string; artist: string; source: string } | null>(null);
+  const [segs, setSegs] = useState<Seg[]>([]); const [artist, setArtist] = useState(''); const [mood, setMood] = useState(''); const [genre, setGenre] = useState('');
+  const [progress, setProgress] = useState({ done: 0, total: 0 }); const [url, setUrl] = useState(''); const [playing, setPlaying] = useState<number | null>(null); const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => { const u = URL.createObjectURL(file); setUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
+  useEffect(() => {
+    const up = uploadWithProgress(file, file.name, 'audio', {}, setPct, '/api/music/album');
+    up.promise.then((r) => { setInfo(r); setSegs(r.segments); setArtist(r.artist); setStage('review'); }).catch((e) => setErr(e?.message || 'Upload failed'));
+    return () => up.abort();
+  }, [file]);
+  useEffect(() => { // stop a previewed song at its end
+    const a = audio.current; if (!a || playing === null) return;
+    const end = segs[playing]?.endMs ?? 0; const tick = () => { if (a.currentTime * 1000 >= end) { a.pause(); setPlaying(null); } };
+    a.addEventListener('timeupdate', tick); return () => a.removeEventListener('timeupdate', tick);
+  }, [playing, segs]);
+  const play = (i: number) => { const a = audio.current; if (!a) return; if (playing === i) { a.pause(); setPlaying(null); return; } a.currentTime = segs[i].startMs / 1000; void a.play(); setPlaying(i); };
+  const setStart = (i: number, ms: number) => setSegs((l) => l.map((s, k) => (k === i ? { ...s, startMs: ms } : k === i - 1 ? { ...s, endMs: ms } : s)));
+  const remove = (i: number) => setSegs((l) => { // the neighbour absorbs the removed song's time, so nothing is cut out of the middle
+    const n = l.filter((_, k) => k !== i); if (!n.length) return l; if (i > 0) n[i - 1] = { ...n[i - 1], endMs: l[i].endMs }; else n[0] = { ...n[0], startMs: l[i].startMs }; return n; });
+  const valid = segs.length > 0 && segs.every((s) => s.endMs - s.startMs >= 3000 && s.title.trim());
+  async function start() {
+    if (!info) return; setErr('');
+    try {
+      await api.post(`/api/music/album/${info.id}/split`, { artist: artist.trim(), mood, genre, tracks: segs.map((s) => ({ ...s, title: s.title.trim() })) });
+      setStage('cutting'); setProgress({ done: 0, total: segs.length });
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1200));
+        const st = await api.get(`/api/music/album/${info.id}`); setProgress({ done: st.done, total: st.total });
+        if (st.state === 'failed') { setErr(st.error || 'Splitting failed'); setStage('review'); return; }
+        if (st.state === 'done') { setStage('done'); toast(`${st.total} songs added`); return; }
+      }
+    } catch (e: any) { setErr(e?.message || 'Could not start'); setStage(stage === 'cutting' ? 'review' : stage); }
+  }
+  return (
+    <Dialog title="Split an album" onClose={stage === 'cutting' ? () => {} : onClose} width={560}
+      footer={stage === 'review' ? <><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!valid} onClick={() => void start()}>Add {segs.length} song{segs.length === 1 ? '' : 's'}</button></> : stage === 'done' ? <button className="btn btn-primary" onClick={onClose}>Done</button> : err ? <button className="btn btn-primary" onClick={onClose}>Close</button> : undefined}>
+      {stage === 'uploading' && !err ? <><p><b className="truncate" style={{ display: 'block' }}>{file.name}</b></p><div className="progress"><i style={{ width: `${Math.round(pct * 100)}%` }} /></div><p className="muted">{pct < 1 ? `Uploading… ${Math.round(pct * 100)}%` : 'Finding the songs… this can take a minute for a long album.'}</p></> : null}
+      {stage === 'cutting' ? <><div className="progress"><i style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} /></div><p className="muted">Cutting songs… {progress.done} of {progress.total}. You can keep this window open or leave it; the songs appear in your library as they finish.</p></> : null}
+      {stage === 'done' ? <p>All songs were added to your library and will show on your other devices.</p> : null}
+      {err ? <p className="err">{err}</p> : null}
+      {stage === 'review' && info ? <>
+        <p className="muted">{info.source === 'chapters' ? 'Songs found from the album’s chapters.' : info.source === 'silence' ? 'Songs found by the gaps of silence between them.' : 'No gaps were found, so this is one song.'} Check them, play to listen, fix names or start times (m:ss), and remove any that are wrong.</p>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <label className="field grow"><span className="label-t">Artist</span><input className="input" value={artist} maxLength={120} onChange={(e) => setArtist(e.target.value)} /></label>
+          <label className="field"><span className="label-t">Mood</span><select className="select" value={mood} onChange={(e) => setMood(e.target.value)}><option value="">None</option>{moods.map((m) => <option key={m}>{m}</option>)}</select></label>
+          <label className="field"><span className="label-t">Genre</span><select className="select" value={genre} onChange={(e) => setGenre(e.target.value)}><option value="">None</option>{genres.map((g) => <option key={g}>{g}</option>)}</select></label>
+        </div>
+        <ul className="album-list">{segs.map((s, i) => (
+          <li key={i}>
+            <button className="icon-btn" aria-label={playing === i ? `Pause song ${i + 1}` : `Play song ${i + 1}`} onClick={() => play(i)}><Icon name={playing === i ? 'pause' : 'play'} size={18} fill /></button>
+            <span className="num">{i + 1}</span>
+            <input className="input" aria-label={`Title of song ${i + 1}`} value={s.title} maxLength={120} onChange={(e) => setSegs((l) => l.map((x, k) => (k === i ? { ...x, title: e.target.value } : x)))} />
+            <input className="input time" aria-label={`Start of song ${i + 1}`} defaultValue={mmss(s.startMs)} key={`${i}-${s.startMs}`} disabled={i === 0} onBlur={(e) => { const ms = parseMmss(e.target.value); if (ms !== null && ms > (segs[i - 1]?.startMs ?? 0) + 2000 && ms < s.endMs - 2000) setStart(i, ms); else e.target.value = mmss(s.startMs); }} />
+            <small className="muted">{mmss(s.endMs - s.startMs)}</small>
+            <button className="icon-btn" aria-label={`Remove song ${i + 1}`} disabled={segs.length < 2} onClick={() => remove(i)}><Icon name="trash" size={18} /></button>
+          </li>))}</ul>
+        <audio ref={audio} src={url} preload="metadata" onEnded={() => setPlaying(null)} />
+      </> : null}
+    </Dialog>
+  );
 }

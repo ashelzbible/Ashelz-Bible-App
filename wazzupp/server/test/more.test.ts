@@ -1,10 +1,15 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Client, PNG, Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
+import { Client, PNG, Socket, dm, newUser, say, sleep, start, type Ctx } from './helpers.ts';
 import { config } from '../src/config.ts';
 import { refreshProviderIce } from '../src/lib/ice.ts';
 import { DbStorage } from '../src/lib/storage.ts';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ffmpegAvailable, segmentsFromSilence } from '../src/lib/album.ts';
 
 let ctx: Ctx;
 before(async () => { ctx = await start(); });
@@ -207,5 +212,35 @@ describe('music library syncs across devices', () => {
     assert.equal((await other.get('/api/music')).body.tracks.length, 0);
     assert.equal((await other.del(`/api/music/${ids[0]}`)).status, 404);
     phone.close();
+  });
+});
+
+describe('album splitting', () => {
+  it('turns silence gaps into track boundaries and merges tiny pieces', () => {
+    const segs = segmentsFromSilence(300_000, [{ start: 99, end: 101 }, { start: 100.5, end: 101 }, { start: 200, end: 202 }, { start: 205, end: 206 }]);
+    assert.deepEqual(segs.map((s) => [Math.round(s.startMs / 1000), Math.round(s.endMs / 1000)]), [[0, 101], [101, 206], [206, 300]]);
+    assert.deepEqual(segmentsFromSilence(60_000, []), [{ startMs: 0, endMs: 60_000 }]);
+  });
+
+  it('splits an uploaded album into separate songs in the library, and keeps other people out', async (t) => {
+    if (!(await ffmpegAvailable())) return t.skip('ffmpeg is not installed');
+    const dir = mkdtempSync(join(tmpdir(), 'wz-albumtest-')); const out = join(dir, 'album.mp3');
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex', 'sine=f=440:d=30[a];anullsrc=r=44100:cl=mono:d=2[s];sine=f=660:d=30[b];anullsrc=r=44100:cl=mono:d=2[s2];sine=f=880:d=30[c];[a][s][b][s2][c]concat=n=5:v=0:a=1[o]', '-map', '[o]', '-metadata', 'album=Test Album', '-metadata', 'artist=The Band', out]);
+    const a = await newUser(ctx, 'albumer'); const other = await newUser(ctx, 'albumnosy');
+    assert.equal((await a.upload(Buffer.from('not audio at all'), 'x.mp3', 'audio', {}, '/api/music/album')).status, 415);
+    const up = await a.upload(readFileSync(out), 'Test Album.mp3', 'audio', {}, '/api/music/album');
+    assert.equal(up.status, 201); assert.equal(up.body.source, 'silence'); assert.equal(up.body.segments.length, 3);
+    assert.equal(up.body.album, 'Test Album'); assert.equal(up.body.artist, 'The Band');
+    assert.equal((await other.get(`/api/music/album/${up.body.id}`)).status, 404);
+    assert.equal((await other.post(`/api/music/album/${up.body.id}/split`, { tracks: [{ startMs: 0, endMs: 10000, title: 'x' }] })).status, 404);
+    assert.equal((await a.post(`/api/music/album/${up.body.id}/split`, { tracks: [{ startMs: 0, endMs: 1000, title: 'too short' }] })).status, 400);
+    const tracks = up.body.segments.map((s: any, i: number) => ({ startMs: s.startMs, endMs: s.endMs, title: ['Alpha', 'Beta', 'Gamma'][i] }));
+    const go = await a.post(`/api/music/album/${up.body.id}/split`, { artist: 'The Band', mood: 'Calm', tracks }); assert.equal(go.status, 202);
+    for (let i = 0; i < 60; i++) { const st = (await a.get(`/api/music/album/${up.body.id}`)).body; if (st.state === 'done') break; assert.notEqual(st.state, 'failed', st.error); await sleep(500); }
+    const lib = (await a.get('/api/music')).body.tracks;
+    assert.deepEqual(lib.map((x: any) => x.title).sort(), ['Alpha', 'Beta', 'Gamma']); assert.ok(lib.every((x: any) => x.artist === 'The Band' && x.mood === 'Calm'));
+    assert.ok(lib.every((x: any) => Math.abs(x.durationMs - 30000) < 3500), 'each song is about 30 seconds');
+    const u = (await a.post('/api/media/urls', { ids: [lib[0].mediaId] })).body.urls[lib[0].mediaId]; assert.ok(u.url);
+    assert.equal((await other.get('/api/music')).body.tracks.length, 0);
   });
 });

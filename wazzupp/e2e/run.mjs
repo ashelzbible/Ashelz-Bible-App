@@ -255,13 +255,29 @@ describe('browser end to end', () => {
     await second.page.goto(BASE); await second.page.getByLabel('Email or username').fill('e2e_alice'); await second.page.getByLabel('Password').fill(PW); await second.page.getByRole('button', { name: 'Sign in' }).click();
     await second.page.locator('.app').waitFor(); await second.page.evaluate(() => { location.hash = '#/settings/music'; });
     await a.page.evaluate(() => { location.hash = '#/settings/music'; });
-    await a.page.locator('input[type=file]').first().setInputFiles(['Adele - Easy.wav', 'Burna Boy - Last.wav', 'Solo.wav'].map((name) => ({ name, mimeType: 'audio/wav', buffer: wav })));
+    await a.page.locator('input[type=file][multiple]').setInputFiles(['Adele - Easy.wav', 'Burna Boy - Last.wav', 'Solo.wav'].map((name) => ({ name, mimeType: 'audio/wav', buffer: wav })));
     await a.page.getByText('3 songs added').waitFor({ timeout: 20000 });
     await a.page.getByText('Easy', { exact: true }).waitFor(); await a.page.getByText('Adele').first().waitFor();
     await second.page.getByText('Last', { exact: true }).waitFor({ timeout: 10000 }); // appeared on the other device without a refresh
     await a.page.getByLabel('Delete Solo').click();
     await second.page.getByText('Solo', { exact: true }).waitFor({ state: 'detached', timeout: 10000 });
     await second.ctx.close();
+  });
+
+  it('splits an uploaded album into songs, with a review step, and the songs land in My music', async () => {
+    const { execFileSync } = await import('node:child_process'); const { readFileSync } = await import('node:fs');
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex', 'sine=f=440:d=30[a];anullsrc=r=44100:cl=mono:d=2[s];sine=f=660:d=30[b];anullsrc=r=44100:cl=mono:d=2[s2];sine=f=880:d=30[c];[a][s][b][s2][c]concat=n=5:v=0:a=1[o]', '-map', '[o]', '-metadata', 'artist=E2E Band', '/tmp/wz-e2e-album.mp3']);
+    await a.page.evaluate(() => { location.hash = '#/settings/music'; });
+    await a.page.getByRole('button', { name: 'Split an album' }).waitFor();
+    await a.page.locator('input[type=file]:not([multiple])').setInputFiles({ name: 'E2E Album.mp3', mimeType: 'audio/mpeg', buffer: readFileSync('/tmp/wz-e2e-album.mp3') });
+    await a.page.getByLabel('Title of song 3').waitFor({ timeout: 30000 });
+    assert.equal(await a.page.getByLabel(/^Title of song/).count(), 3);
+    await a.page.getByLabel('Title of song 1').fill('Opening'); await a.page.getByLabel('Remove song 2').click();
+    assert.equal(await a.page.getByLabel(/^Title of song/).count(), 2);
+    await a.page.getByRole('button', { name: 'Add 2 songs' }).click();
+    await a.page.getByText('All songs were added').waitFor({ timeout: 40000 });
+    await a.page.getByRole('button', { name: 'Done', exact: true }).last().click();
+    await a.page.getByText('Opening', { exact: true }).waitFor();
   });
 
   it('has no horizontal overflow or clipped layout at phone, tablet and desktop sizes', async () => {

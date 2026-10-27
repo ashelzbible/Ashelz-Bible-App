@@ -59,12 +59,12 @@ export class Client {
   patch = (url: string, body?: unknown) => this.req('PATCH', url, body ?? {});
   del = (url: string, body?: unknown) => this.req('DELETE', url, body);
 
-  async upload(file: Buffer, filename: string, kind: string, extra: Record<string, string> = {}) {
+  async upload(file: Buffer, filename: string, kind: string, extra: Record<string, string> = {}, url = '/api/media') {
     const boundary = '----wz' + randomUUID();
     const parts: Buffer[] = [];
     for (const [k, v] of Object.entries({ kind, ...extra })) parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
     parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`), file, Buffer.from(`\r\n--${boundary}--\r\n`));
-    return this.req('POST', '/api/media', undefined, { headers: { 'content-type': `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat(parts) });
+    return this.req('POST', url, undefined, { headers: { 'content-type': `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat(parts) });
   }
 }
 

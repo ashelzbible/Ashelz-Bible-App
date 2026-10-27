@@ -7,6 +7,14 @@ import { removeMediaIfUnreferenced } from './media.ts';
 import { config } from '../config.ts';
 import { rateLimit } from '../lib/ratelimit.ts';
 import { HttpError } from '../lib/errors.ts';
+import { randomUUID, createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { storage } from '../lib/storage.ts';
+import { ALBUM_ROOT, analyse, cleanupAlbum, cutTrack, fileSize, ffmpegAvailable, saveUpload, sweepAlbums, trackStream, type AlbumInfo } from '../lib/album.ts';
+
+interface AlbumJob { userId: string; file: string; info: AlbumInfo; at: number; state: 'ready' | 'splitting' | 'done' | 'failed'; done: number; total: number; error?: string }
+const albums = new Map<string, AlbumJob>();
+const ALBUM_MAX_BYTES = 300 * 1024 ** 2;
 
 const uuid = z.string().uuid();
 const MOODS = ['Happy', 'Sad', 'Romantic', 'Calm', 'Energetic', 'Worship', 'Focus', 'Party'];
@@ -25,7 +33,79 @@ export const isBuiltinUrl = (u: string) => BUILTIN_TRACKS.some((t) => t.previewU
 
 export const CATALOG_HOST = /^https:\/\/([a-z0-9-]+\.)*jamendo\.com\//i;
 
+const join2 = (file: string) => file.slice(0, file.lastIndexOf('/'));
+
 export async function musicRoutes(app: FastifyInstance) {
+  // ---- Album splitting: upload one long file, review the detected tracks, then cut them into separate songs ----
+  app.post('/api/music/album', { preHandler: authenticateVerified }, async (req, reply) => {
+    if (!(await ffmpegAvailable())) throw new HttpError(501, 'splitting_unavailable', 'Album splitting is not available on this server');
+    await rateLimit(`album:${req.auth.userId}`, 6, 3600);
+    if (!req.isMultipart()) throw badRequest('multipart_required');
+    const part = await req.file({ limits: { fileSize: ALBUM_MAX_BYTES, files: 1 } });
+    if (!part) throw badRequest('file_required');
+    const id = randomUUID(); let file: string;
+    try {
+      file = await saveUpload(id, part.file);
+      if (part.file.truncated) throw new HttpError(413, 'file_too_large', 'That file is over 300 MB. Split it into two parts first.');
+      const name = (part.filename || 'Album').replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim().slice(0, 100) || 'Album';
+      const info = await analyse(file, name);
+      albums.set(id, { userId: req.auth.userId, file, info, at: Date.now(), state: 'ready', done: 0, total: 0 });
+      reply.code(201);
+      return { id, ...info };
+    } catch (e: any) {
+      await cleanupAlbum(id);
+      if (e instanceof HttpError) throw e;
+      if (e?.message === 'too_long') throw badRequest('too_long', 'That recording is longer than 4 hours');
+      throw new HttpError(415, 'not_audio', 'That file could not be read as audio');
+    }
+  });
+
+  app.get('/api/music/album/:id', { preHandler: authenticateVerified }, async (req) => {
+    const { id } = parse(z.object({ id: uuid }), req.params); const a = albums.get(id);
+    if (!a || a.userId !== req.auth.userId) throw notFound('album_not_found');
+    return { state: a.state, done: a.done, total: a.total, error: a.error ?? null };
+  });
+
+  app.post('/api/music/album/:id/split', { preHandler: authenticateVerified }, async (req, reply) => {
+    const { id } = parse(z.object({ id: uuid }), req.params); const a = albums.get(id);
+    if (!a || a.userId !== req.auth.userId) throw notFound('album_not_found', 'This upload expired. Add the album again.');
+    if (a.state !== 'ready') throw badRequest('already_started');
+    const b = parse(z.object({
+      artist: z.string().trim().max(120).default(''), mood: z.string().trim().max(40).default(''), genre: z.string().trim().max(40).default(''),
+      tracks: z.array(z.object({ startMs: z.number().int().min(0), endMs: z.number().int().min(1), title: z.string().trim().min(1).max(120) })).min(1).max(100),
+    }), req.body);
+    for (const t of b.tracks) if (t.endMs - t.startMs < 3000 || t.endMs > a.info.durationMs + 1000) throw badRequest('invalid_tracks', 'Each song must be at least 3 seconds and inside the recording');
+    const have = await one(`select count(*)::int n from music_tracks where user_id = $1`, [req.auth.userId]);
+    if (have.n + b.tracks.length > 300) throw badRequest('library_full', 'Your music library holds up to 300 songs');
+    a.state = 'splitting'; a.total = b.tracks.length; a.done = 0; a.at = Date.now();
+    void (async () => {
+      try {
+        const used = await one(`select coalesce(sum(size),0)::bigint n from media_assets where owner_id = $1 and deleted_at is null`, [a.userId]); let bytes = Number(used.n);
+        for (const [i, t] of b.tracks.entries()) {
+          const out = await cutTrack(a.file, a.info.codec, t, join2(a.file), i + 1);
+          const size = await fileSize(out.path); bytes += size;
+          if (bytes > config.storageQuotaBytes) throw new HttpError(413, 'quota_exceeded', 'Storage quota exceeded');
+          const mediaId = randomUUID(); const key = `${a.userId.slice(0, 2)}/${a.userId}/${mediaId}`;
+          const sha = createHash('sha256'); for await (const c of createReadStream(out.path)) sha.update(c);
+          await storage.put(key, trackStream(out.path));
+          await tx(async (tx2) => {
+            await tx2.q(`insert into media_assets(id, owner_id, kind, mime, size, sha256, original_name, storage_key, duration_ms, scan_status) values ($1,$2,'audio',$3,$4,$5,$6,$7,$8,'clean')`,
+              [mediaId, a.userId, out.mime, size, sha.digest('hex'), `${t.title}.${out.ext}`.slice(0, 200), key, t.endMs - t.startMs]);
+            const x = await tx2.one(`insert into music_tracks(user_id, media_id, title, artist, mood, genre, duration_ms) values ($1,$2,$3,$4,$5,$6,$7) returning id`, [a.userId, mediaId, t.title, b.artist, b.mood, b.genre, t.endMs - t.startMs]);
+            tx2.emit([a.userId], 'music.changed', { id: x.id });
+          });
+          a.done = i + 1;
+        }
+        a.state = 'done';
+      } catch (e: any) { a.state = 'failed'; a.error = e instanceof HttpError ? e.message : 'Splitting failed. Try a different file.'; console.error(JSON.stringify({ level: 'warn', msg: 'album split failed', err: String(e) })); }
+      finally { await cleanupAlbum(id); setTimeout(() => albums.delete(id), 10 * 60_000).unref(); }
+    })();
+    reply.code(202);
+    return { started: true, total: b.tracks.length };
+  });
+  setInterval(() => { void sweepAlbums(); for (const [k, v] of albums) if (v.state === 'ready' && Date.now() - v.at > 3600_000) { albums.delete(k); void cleanupAlbum(k); } }, 10 * 60_000).unref();
+  void ALBUM_ROOT;
+
   // Search the licensed catalogue (Jamendo: Creative Commons music with a free API). The API key stays on the server.
   app.get('/api/music/catalog', { preHandler: authenticateVerified }, async (req) => {
     const f = parse(z.object({ q: z.string().trim().max(100).default('') }), req.query);
