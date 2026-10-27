@@ -161,13 +161,74 @@ export async function callRoutes(app: FastifyInstance) {
       `select c.*, o.user_id other_id, op.display_name other_name, op.avatar_media_id other_avatar, ou.username other_username
          from calls c join call_participants me on me.call_id = c.id and me.user_id = $1
          join call_participants o on o.call_id = c.id and o.user_id <> $1 join users ou on ou.id = o.user_id join user_profiles op on op.user_id = o.user_id
-        order by c.created_at desc limit 100`, [req.auth.userId]);
+        where me.hidden_at is null order by c.created_at desc limit 100`, [req.auth.userId]);
     return { calls: rows.map((r) => ({ ...callDto(r), direction: r.initiator_id === req.auth.userId ? 'outgoing' : 'incoming', other: { id: r.other_id, displayName: r.other_name, username: r.other_username, avatarMediaId: r.other_avatar },
       durationSec: r.connected_at && r.ended_at ? Math.round((+new Date(r.ended_at) - +new Date(r.connected_at)) / 1000) : 0 })) };
   });
+  // "Clear call log": hides finished calls for this user only; the other person's log is untouched.
+  app.delete('/api/calls', { preHandler: authenticateVerified }, async (req, reply) => {
+    await q(`update call_participants set hidden_at = now() where user_id = $1 and hidden_at is null and call_id in (select id from calls where state in ('declined','missed','ended','failed','cancelled'))`, [req.auth.userId]);
+    reply.code(204);
+  });
+
+  const schedBody = z.object({ conversationId: z.string().uuid(), kind: z.enum(['audio', 'video']), startsAt: z.string().datetime(), note: z.string().max(200).default('') });
+  app.post('/api/calls/scheduled', { preHandler: authenticateVerified }, async (req, reply) => {
+    const b = parse(schedBody, req.body);
+    const when = new Date(b.startsAt);
+    if (when.getTime() < Date.now() + 30_000 || when.getTime() > Date.now() + 365 * 86400_000) throw badRequest('invalid_start_time', 'Pick a time in the future (within a year)');
+    const out = await tx(async (t) => {
+      const conv = await requireMember(t, b.conversationId, req.auth.userId);
+      if (conv.kind !== 'direct') throw badRequest('group_calls_unsupported');
+      const others = (await activeMemberIds(t, b.conversationId)).filter((u) => u !== req.auth.userId);
+      const blk = await t.one(`select 1 from blocks where (blocker_id = $1 and blocked_id = $2) or (blocker_id = $2 and blocked_id = $1)`, [req.auth.userId, others[0]]);
+      if (blk) throw forbidden('cannot_call');
+      const n = await t.one(`select count(*)::int n from scheduled_calls where creator_id = $1 and state = 'pending'`, [req.auth.userId]);
+      if (n.n >= 50) throw badRequest('too_many_scheduled');
+      const r = await t.one(`insert into scheduled_calls(conversation_id, creator_id, kind, starts_at, note) values ($1,$2,$3,$4,$5) returning id`, [b.conversationId, req.auth.userId, b.kind, when, b.note]);
+      t.emit([req.auth.userId, ...others], 'calls.scheduled', { id: r.id });
+      return r.id as string;
+    });
+    reply.code(201);
+    return { id: out };
+  });
+  app.get('/api/calls/scheduled', { preHandler: authenticateVerified }, async (req) => {
+    const { rows } = await q(
+      `select s.id, s.conversation_id, s.creator_id, s.kind, s.starts_at, s.note, o.user_id other_id, op.display_name other_name, ou.username other_username
+         from scheduled_calls s join conversation_members me on me.conversation_id = s.conversation_id and me.user_id = $1 and me.left_at is null and not me.removed
+         join conversation_members o on o.conversation_id = s.conversation_id and o.user_id <> $1 join users ou on ou.id = o.user_id join user_profiles op on op.user_id = o.user_id
+        where s.state = 'pending' order by s.starts_at limit 100`, [req.auth.userId]);
+    return { scheduled: rows.map((r) => ({ id: r.id, conversationId: r.conversation_id, createdByMe: r.creator_id === req.auth.userId, kind: r.kind, startsAt: r.starts_at, note: r.note, other: { id: r.other_id, displayName: r.other_name, username: r.other_username } })) };
+  });
+  app.delete('/api/calls/scheduled/:id', { preHandler: authenticateVerified }, async (req, reply) => {
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    await tx(async (t) => {
+      const s = await t.one(`select conversation_id from scheduled_calls where id = $1 and state = 'pending'`, [id]);
+      if (!s) throw notFound('scheduled_call_not_found');
+      await requireMember(t, s.conversation_id, req.auth.userId); // only participants may cancel
+      await t.q(`update scheduled_calls set state = 'cancelled' where id = $1`, [id]);
+      t.emit(await activeMemberIds(t, s.conversation_id), 'calls.scheduled', { id, cancelled: true });
+    });
+    reply.code(204);
+  });
+
   app.get('/api/calls/active', { preHandler: authenticateVerified }, async (req) => {
     const r = await one(`select c.* from calls c join call_participants p on p.call_id = c.id and p.user_id = $1 where c.state in ('ringing','connecting','connected') order by c.created_at desc limit 1`, [req.auth.userId]);
     return { call: r ? callDto(r) : null, iceServers: r ? iceServers(req.auth.userId) : undefined };
   });
 }
 void randomUUID;
+
+/** Fires reminders for scheduled calls that are due: in-app notification + live event + push to every participant. */
+export async function remindDueCalls(): Promise<number> {
+  const due = await tx(async (t) => {
+    const rows = (await t.q(`update scheduled_calls set state = 'reminded' where id in (select id from scheduled_calls where state = 'pending' and starts_at <= now() order by starts_at limit 100 for update skip locked) returning *`)).rows;
+    for (const s of rows) {
+      const members = await activeMemberIds(t, s.conversation_id);
+      for (const uid of members) await t.q(`insert into notifications(user_id, kind, conversation_id, payload) values ($1,'call_reminder',$2,$3)`, [uid, s.conversation_id, JSON.stringify({ scheduledId: s.id, kind: s.kind, note: s.note })]);
+      t.emit(members, 'call.reminder', { id: s.id, conversationId: s.conversation_id, kind: s.kind, note: s.note });
+      t.afterCommit.push(async () => { for (const uid of members) if (!(await hub.isOnline(uid))) await pushToUser(uid, null, { title: 'Scheduled call', body: 'It is time for your call', tag: `sched:${s.id}`, data: { conversationId: s.conversation_id } }); });
+    }
+    return rows.length;
+  });
+  return due;
+}

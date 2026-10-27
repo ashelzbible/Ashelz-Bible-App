@@ -214,6 +214,6 @@ describe('migrations', () => {
     assert.deepEqual(applied, []);
     assert.equal((await q('select count(*)::int n from users')).rows[0].n, before);
     const names = (await q('select name from schema_migrations order by name')).rows.map((r) => r.name);
-    assert.deepEqual(names, ['001_core.sql', '002_productivity.sql']);
+    assert.deepEqual(names, ['001_core.sql', '002_productivity.sql', '003_call_log_and_scheduling.sql', '004_status_sharing_feedback.sql', '005_status_voice_font.sql', '006_music_library.sql']);
   });
 });

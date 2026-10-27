@@ -201,7 +201,7 @@ function simulateReply(c: Conv, mine: Msg) {
   if (!peerId || blocked.has(peerId)) return;
   const person = P(peerId);
   later(500, () => { c.watermark.delivered = Math.max(c.watermark.delivered, mine.seq); emit('receipt', { conversationId: c.id, userId: peerId, deliveredSeq: mine.seq }); });
-  later(1400, () => { if (settings.privacy.readReceipts !== false || true) { c.watermark.read = Math.max(c.watermark.read, mine.seq); emit('receipt', { conversationId: c.id, userId: peerId, deliveredSeq: mine.seq, readSeq: mine.seq }); } push({ t: 'typing', conversationId: c.id, userId: peerId, state: 'composing' }); });
+  later(1400, () => { c.watermark.read = Math.max(c.watermark.read, mine.seq); emit('receipt', { conversationId: c.id, userId: peerId, deliveredSeq: mine.seq, readSeq: mine.seq }); push({ t: 'typing', conversationId: c.id, userId: peerId, state: 'composing' }); });
   later(3200, () => {
     push({ t: 'typing', conversationId: c.id, userId: peerId, state: 'paused' });
     const text = person.replies[Math.floor(Math.random() * person.replies.length)];
@@ -339,7 +339,7 @@ route('GET', '/api/status/mine', () => ({ items: statuses.filter((s) => s.userId
 route('POST', '/api/status', ({ body }) => { const s: St = { id: uid(), userId: ME, kind: body.kind, body: body.body ?? '', caption: body.caption ?? '', background: body.background ?? null, mediaId: body.mediaId ?? null, createdAt: Date.now(), viewed: true, reaction: null, viewers: [] }; statuses.push(s); later(2500, () => { s.viewers.push({ userId: 'u-sarah', displayName: 'Sarah Johnson', viewedAt: iso(Date.now()), reaction: '❤️' }); emit('status.viewed', {}); }); return [201, { id: s.id }]; });
 route('POST', '/api/status/:id/view', ({ m }) => { const s = statuses.find((x) => x.id === m[1]); if (s) s.viewed = true; });
 route('POST', '/api/status/:id/react', ({ m, body }) => { const s = statuses.find((x) => x.id === m[1]); if (s) s.reaction = body.emoji; });
-route('POST', '/api/status/:id/reply', ({ m, body }) => { const s = statuses.find((x) => x.id === m[1])!; const c = [...convs.values()].find((x) => x.peer === s.userId)!; const nm = msg(c, ME, 'text', `↩ Status: “${(s.body || s.caption || 'Photo').slice(0, 80)}”\n${body.body}`, 0); deliverMessage(c, nm); simulateReply(c, nm); return { conversationId: c.id, message: msgView(c, nm) }; });
+route('POST', '/api/status/:id/reply', ({ m, body }) => { const s = statuses.find((x) => x.id === m[1])!; const c = [...convs.values()].find((x) => x.peer === s.userId)!; const nm = msg(c, ME, 'text', body.body, 0, { meta: { statusReply: { ownerId: s.userId, kind: s.kind ?? 'text', text: (s.body || s.caption || 'Photo').slice(0, 80), mediaId: null } } }); deliverMessage(c, nm); simulateReply(c, nm); return { conversationId: c.id, message: msgView(c, nm) }; });
 route('PUT', '/api/status/mute/:uid', ({ m, body }) => { if (body.muted) mutedStatus.add(m[1]); else mutedStatus.delete(m[1]); });
 route('DELETE', '/api/status/:id', ({ m }) => { const i = statuses.findIndex((x) => x.id === m[1]); if (i >= 0) statuses.splice(i, 1); });
 

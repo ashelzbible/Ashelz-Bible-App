@@ -9,9 +9,9 @@ import { Icon } from '../ui/Icon.tsx';
 import { Empty, ListSkeleton } from '../ui/Misc.tsx';
 import { useMenu, type MenuItem } from '../ui/Overlay.tsx';
 import { PaneFrame } from './Frame.tsx';
-import { logout, patchState, guard } from '../lib/actions.ts';
+import { patchState, guard, markAllRead } from '../lib/actions.ts';
 import { Ticks } from './Bubble.tsx';
-import { NewChatDialog, NewGroupDialog, NewCommunityDialog } from './Dialogs.tsx';
+import { NewChatDialog, NewGroupDialog, NewCommunityDialog, BroadcastDialog } from './Dialogs.tsx';
 import { StatusStrip } from './Status.tsx';
 
 function lastPreview(c: Conv, meId: string, nameOf: (id: string) => string) {
@@ -101,7 +101,7 @@ export function ChatList() {
   const [q, setQ] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [dlg, setDlg] = useState<null | 'chat' | 'group' | 'community'>(null);
+  const [dlg, setDlg] = useState<null | 'chat' | 'group' | 'community' | 'broadcast'>(null);
   const [hits, setHits] = useState<Msg[] | null>(null);
   const ctx = ConvContextMenu();
   const menu = useMenu();
@@ -137,11 +137,16 @@ export function ChatList() {
   );
   const actions = (<>
     {layout === 'desktop' ? <button className="icon-btn on-dark" onClick={() => setDlg('chat')} aria-label="New chat" title="New chat"><Icon name="chat-plus" /></button> : null}
+    {layout === 'desktop' ? <button className="icon-btn on-dark" aria-label="Filter chats" title="Filter chats" onClick={(e) => menu.open((['all', 'unread', 'favorites', 'groups'] as const).map((f) => ({ label: f[0].toUpperCase() + f.slice(1), icon: 'filter' as const, selected: filter === f && !showArchived, onClick: () => { setFilter(f); setShowArchived(false); } })), e)}><Icon name="filter" /></button> : null}
     {layout === 'mobile' ? <button className="icon-btn on-dark" onClick={() => setSearchOpen((v) => !v)} aria-label="Search"><Icon name="search" /></button> : null}
-    <button className="icon-btn on-dark" aria-label="Menu" onClick={(e) => menu.open([
-      { label: 'New chat', icon: 'chat-plus', onClick: () => setDlg('chat') }, { label: 'New group', icon: 'users', onClick: () => setDlg('group') }, { label: 'New community or channel', icon: 'megaphone', onClick: () => setDlg('community') },
-      { divider: true, label: '' }, { label: 'Starred messages', icon: 'star', onClick: () => go('settings/starred') }, { label: showArchived ? 'Back to chats' : `Archived (${archivedCount})`, icon: 'archive', onClick: () => setShowArchived((v) => !v) },
-      { label: 'Settings', icon: 'settings', onClick: () => go('settings') }, { divider: true, label: '' }, { label: 'Sign out', icon: 'logout', onClick: () => logout() },
+    {layout !== 'desktop' ? <button className="icon-btn on-dark" onClick={() => go('status/new/camera')} aria-label="Camera" title="Camera: post a photo or video status"><Icon name="camera" /></button> : null}
+    <button className="icon-btn on-dark" aria-label="More options" onClick={(e) => menu.open([
+      { label: 'New group', icon: 'users', onClick: () => setDlg('group') },
+      { label: 'Broadcast lists', icon: 'megaphone', onClick: () => setDlg('broadcast') },
+      { label: 'Linked devices', icon: 'laptop', onClick: () => go('settings/devices') },
+      { label: 'Starred', icon: 'star', onClick: () => go('settings/starred') },
+      { label: 'Read all', icon: 'check-check', onClick: () => void markAllRead() },
+      { label: 'Settings', icon: 'settings', onClick: () => go('settings') },
     ], e)}><Icon name="more" /></button>
     {layout === 'tablet' ? null : null}
   </>);
@@ -164,12 +169,13 @@ export function ChatList() {
   );
   return (
     <>
-      <PaneFrame title="Wazzupp" search={layout === 'mobile' && !searchOpen && !q ? undefined : search} actions={actions} filters={filters} strip={layout === 'mobile' && !q ? <StatusStrip /> : undefined}>{body}</PaneFrame>
+      <PaneFrame title={layout === 'mobile' ? 'Wazzupp' : 'Chats'} search={layout === 'mobile' && !searchOpen && !q ? undefined : search} actions={actions} filters={layout === 'desktop' ? undefined : filters} strip={layout === 'mobile' && !q ? <StatusStrip /> : undefined}>{body}</PaneFrame>
       {layout !== 'desktop' ? <button className="fab" onClick={() => setDlg('chat')} aria-label="New chat"><Icon name="chat-plus" size={24} /></button> : null}
       {ctx.node}{menu.node}
       {dlg === 'chat' ? <NewChatDialog onClose={() => setDlg(null)} onGroup={() => setDlg('group')} onCommunity={() => setDlg('community')} /> : null}
       {dlg === 'group' ? <NewGroupDialog onClose={() => setDlg(null)} /> : null}
       {dlg === 'community' ? <NewCommunityDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'broadcast' ? <BroadcastDialog onClose={() => setDlg(null)} /> : null}
     </>
   );
 }

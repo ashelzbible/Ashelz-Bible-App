@@ -4,9 +4,9 @@ export interface Me {
   settings: Settings; settingsVersion: number;
 }
 export interface Settings {
-  privacy: { lastSeen: string; online: string; profilePhoto: string; about: string; phoneVisible: string; readReceipts: boolean; groupInvites: string; statusAudience: string; linkPreviews: boolean; discoverable: boolean };
+  privacy: { lastSeen: string; online: string; profilePhoto: string; about: string; phoneVisible: string; readReceipts: boolean; groupInvites: string; statusAudience: string; linkPreviews: boolean; discoverable: boolean; statusSharing: boolean; statusExcept: string[]; statusOnly: string[] };
   notifications: { messages: boolean; groups: boolean; calls: boolean; previews: boolean; sound: boolean; quietHours: { enabled: boolean; start: string; end: string; utcOffsetMinutes: number } };
-  appearance: { theme: 'system' | 'light' | 'dark'; fontSize: 'sm' | 'md' | 'lg'; wallpaper: 'doodle' | 'plain' | 'emerald'; language: string };
+  appearance: { theme: 'system' | 'light' | 'dark'; fontSize: 'sm' | 'md' | 'lg'; wallpaper: 'doodle' | 'plain' | 'emerald'; language: string; highContrast: boolean; reduceMotion: boolean };
   media: { autoDownloadImages: boolean; autoDownloadVideos: boolean; autoDownloadDocuments: boolean; dataSaver: boolean };
   statusTtlHours: number;
 }
@@ -29,7 +29,7 @@ export interface Conv {
 export interface Member { id: string; username: string; displayName: string; role: string; avatarMediaId: string | null; statusText: string | null }
 export interface CallRec { id: string; conversationId: string; initiatorId: string; kind: 'audio' | 'video'; state: string; createdAt: string; answeredAt: string | null; connectedAt: string | null; endedAt: string | null; endReason: string | null }
 export interface CallHistory extends CallRec { direction: 'incoming' | 'outgoing'; other: { id: string; displayName: string; username: string; avatarMediaId: string | null }; durationSec: number }
-export interface StatusItem { id: string; kind: 'text' | 'image' | 'video'; body: string; caption: string; background: string | null; mediaId: string | null; createdAt: string; expiresAt: string; viewed: boolean; reaction: string | null }
+export interface StatusItem { id: string; kind: 'text' | 'image' | 'video' | 'voice'; font?: number; audioMediaId?: string | null; audioTitle?: string; body: string; caption: string; background: string | null; mediaId: string | null; createdAt: string; expiresAt: string; viewed: boolean; reaction: string | null; allowSharing?: boolean }
 export interface StatusGroup { userId: string; username: string; displayName: string; avatarMediaId: string | null; muted: boolean; allViewed: boolean; latestAt: string; items: StatusItem[] }
 export interface Community { id: string; name: string; description: string; visibility: string; avatarMediaId: string | null; members: number; role: string | null; announcementConversationId: string | null; groups: Array<{ id: string; title: string; avatarMediaId: string | null; kind: string; memberCount: number; joined: boolean }> }
 export interface Notif { id: string; kind: string; conversationId: string | null; payload: any; createdAt: string; read: boolean }

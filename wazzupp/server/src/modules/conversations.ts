@@ -5,7 +5,7 @@ import { one, q, tx, pool } from '../db/pool.ts';
 import type { Tx } from '../db/pool.ts';
 import { authenticateVerified, parse } from '../lib/http.ts';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.ts';
-import { activeMemberIds, isStaffRole, MESSAGE_COLS, MESSAGE_JOINS, otherWatermarks, requireMember, statusFor, toMessage } from '../lib/conv.ts';
+import { activeMemberIds, isMasked, isStaffRole, MESSAGE_COLS, MESSAGE_JOINS, otherWatermarks, requireMember, statusFor, toMessage } from '../lib/conv.ts';
 import { canSee } from '../lib/users.ts';
 import { sendMessage } from './messages.ts';
 import { randomUUID } from 'node:crypto';
@@ -247,7 +247,8 @@ export async function conversationRoutes(app: FastifyInstance) {
   app.get('/api/conversations/:id/members', { preHandler: authenticateVerified }, async (req) => {
     const { id } = parse(idParam, req.params);
     const { limit, offset } = parse(z.object({ limit: z.coerce.number().int().min(1).max(500).default(200), offset: z.coerce.number().int().min(0).default(0) }), req.query);
-    await requireMember(pool, id, req.auth.userId);
+    const mc = await requireMember(pool, id, req.auth.userId);
+    if (isMasked(mc)) return { members: [] }; // channel subscribers do not get a member list
     const { rows } = await q(
       `select u.id, u.username, p.display_name, p.avatar_media_id, p.status_text, p.settings, m.role, m.joined_at,
               exists(select 1 from contacts c where c.owner_id = u.id and c.contact_id = $2) has_me,

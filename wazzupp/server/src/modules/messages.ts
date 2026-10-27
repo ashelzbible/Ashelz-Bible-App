@@ -6,7 +6,7 @@ import type { Tx } from '../db/pool.ts';
 import { authenticateVerified, parse } from '../lib/http.ts';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.ts';
 import { rateLimit } from '../lib/ratelimit.ts';
-import { activeMemberIds, canPost, isStaffRole, loadMessage, MESSAGE_COLS, MESSAGE_JOINS, otherWatermarks, requireMember, statusFor, toMessage } from '../lib/conv.ts';
+import { activeMemberIds, canPost, isMasked, isStaffRole, loadMessage, maskMsg, MESSAGE_COLS, MESSAGE_JOINS, otherWatermarks, requireMember, statusFor, toMessage } from '../lib/conv.ts';
 import type { MessageDTO } from '../lib/conv.ts';
 import { config } from '../config.ts';
 import { notifyNewMessage } from './notify.ts';
@@ -17,12 +17,22 @@ const KINDS = ['text', 'image', 'video', 'voice', 'audio', 'document', 'location
 const MEDIA_KINDS = new Set(['image', 'video', 'voice', 'audio', 'document', 'sticker']);
 
 const metaSchemas: Record<string, z.ZodType<any>> = {
+  text: z.object({ statusReply: z.object({ ownerId: z.string().uuid(), kind: z.enum(['text', 'image', 'video']), text: z.string().max(200), mediaId: z.string().uuid().nullable().optional() }).strict().optional() }).strict(),
+  video: z.object({ note: z.boolean().optional() }).strict(),
   location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), label: z.string().max(200).optional(), live: z.boolean().optional(), liveUntil: z.string().optional() }).strict(),
   contact: z.object({ name: z.string().min(1).max(100), phone: z.string().max(32).optional(), email: z.string().max(254).optional(), userId: z.string().uuid().optional() }).strict(),
   poll: z.object({ question: z.string().min(1).max(300), options: z.array(z.string().min(1).max(100)).min(2).max(12), multi: z.boolean().default(false) }).strict(),
   event: z.object({ title: z.string().min(1).max(200), startsAt: z.string().datetime(), location: z.string().max(200).optional(), description: z.string().max(1000).optional() }).strict(),
-  gif: z.object({ url: z.string().url().refine((u) => u.startsWith('https://'), 'must be https'), width: z.number().optional(), height: z.number().optional() }).strict(),
+  gif: z.object({ url: z.string().url().refine((u) => /^https:\/\/(media|c)\.tenor\.com\//.test(u), 'must be a Tenor https URL'), preview: z.string().url().refine((u) => /^https:\/\/(media|c)\.tenor\.com\//.test(u), 'must be a Tenor https URL').optional(), width: z.number().optional(), height: z.number().optional() }).strict(),
 };
+
+/** Emits a message event, hiding the sender from channel subscribers. */
+async function emitMessage(t: Tx, kind: string, memberIds: string[], type: string, message: MessageDTO) {
+  if (kind !== 'channel') { t.emit(memberIds, type, { message }); return; }
+  const staff = new Set((await t.q(`select user_id from conversation_members where conversation_id = $1 and left_at is null and not removed and role in ('owner','admin')`, [message.conversationId])).rows.map((r) => r.user_id as string));
+  t.emit(memberIds.filter((id) => staff.has(id)), type, { message });
+  t.emit(memberIds.filter((id) => !staff.has(id)), type, { message: maskMsg(message) });
+}
 
 export interface SendInput {
   conversationId: string; senderId: string; deviceId: string | null; clientMsgId: string; kind: (typeof KINDS)[number] | 'system';
@@ -98,7 +108,7 @@ export async function sendMessage(t: Tx, input: SendInput): Promise<{ message: M
 
   const message = (await loadMessage(t, ins.id))!;
   const audience = undelivered ? [input.senderId] : memberIds;
-  t.emit(audience, 'message.new', { message });
+  await emitMessage(t, conv.kind, audience, 'message.new', message);
 
   if (!undelivered) {
     const recipients = memberIds.filter((id) => id !== input.senderId);
@@ -164,7 +174,7 @@ export async function messageRoutes(app: FastifyInstance) {
     if (order === 'desc') page.reverse();
     const w = await otherWatermarks(pool, id, me);
     const messages = page.map((r) => {
-      const dto = toMessage(r);
+      const dto = isMasked(conv) ? maskMsg(toMessage(r)) : toMessage(r);
       return { ...dto, reactions: r.reactions, starred: r.starred, votes: r.votes ?? undefined, ...(dto.senderId === me ? { status: statusFor(dto, w) } : {}) };
     });
     return { messages, hasMore, watermarks: w };
@@ -184,7 +194,7 @@ export async function messageRoutes(app: FastifyInstance) {
       await t.q(`insert into message_edits(message_id, old_body) values ($1,$2)`, [id, m.body]);
       await t.q(`update messages set body = $2, edited_at = now() where id = $1`, [id, body]);
       const message = (await loadMessage(t, id))!;
-      t.emit(await activeMemberIds(t, conv.id), 'message.update', { message });
+      await emitMessage(t, conv.kind, await activeMemberIds(t, conv.id), 'message.update', message);
       return { message };
     });
   });
@@ -250,11 +260,34 @@ export async function messageRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/starred', { preHandler: authenticateVerified }, async (req) => {
+    const me = req.auth.userId;
     const { rows } = await q(
-      `select ${MESSAGE_COLS} from message_stars s join messages m on m.id = s.message_id ${MESSAGE_JOINS}
-        join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = $1 and cm.left_at is null and not cm.removed
-       where s.user_id = $1 and m.deleted_for_all_at is null and m.seq > cm.first_visible_seq order by s.created_at desc limit 200`, [req.auth.userId]);
-    return { messages: rows.map(toMessage) };
+      `select ${MESSAGE_COLS}, sp.display_name sender_name, c.kind conv_kind, c.title conv_title, cm.role my_role, s.created_at starred_at,
+              (select op.display_name from conversation_members om join user_profiles op on op.user_id = om.user_id where om.conversation_id = c.id and om.user_id <> $1 and c.kind = 'direct' limit 1) other_name
+         from message_stars s join messages m on m.id = s.message_id ${MESSAGE_JOINS}
+         join conversations c on c.id = m.conversation_id
+         join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = $1 and cm.left_at is null and not cm.removed
+         left join user_profiles sp on sp.user_id = m.sender_id
+        where s.user_id = $1 and m.deleted_for_all_at is null and m.seq > cm.first_visible_seq order by s.created_at desc limit 200`, [me]);
+    return { messages: rows.map((r) => {
+      const dto = isMasked({ kind: r.conv_kind, role: r.my_role }) ? maskMsg(toMessage(r)) : { ...toMessage(r), senderName: r.sender_name as string | null };
+      return { ...dto, chat: { kind: r.conv_kind, title: r.conv_kind === 'direct' ? r.other_name : r.conv_title } };
+    }) };
+  });
+
+  // Upcoming events shared in any of my chats.
+  app.get('/api/events', { preHandler: authenticateVerified }, async (req) => {
+    const me = req.auth.userId;
+    const { rows } = await q(
+      `select ${MESSAGE_COLS}, c.kind conv_kind, c.title conv_title,
+              (select op.display_name from conversation_members om join user_profiles op on op.user_id = om.user_id where om.conversation_id = c.id and om.user_id <> $1 and c.kind = 'direct' limit 1) other_name
+         from messages m ${MESSAGE_JOINS}
+         join conversations c on c.id = m.conversation_id
+         join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = $1 and cm.left_at is null and not cm.removed
+        where m.kind = 'event' and m.deleted_for_all_at is null and m.seq > cm.first_visible_seq and (not m.undelivered or m.sender_id = $1)
+          and (m.meta->>'startsAt')::timestamptz >= now() - interval '1 day'
+        order by (m.meta->>'startsAt')::timestamptz limit 100`, [me]);
+    return { events: rows.map((r) => ({ ...toMessage(r), chat: { id: r.conversation_id, kind: r.conv_kind, title: r.conv_kind === 'direct' ? r.other_name : r.conv_title } })) };
   });
 
   app.put('/api/messages/:id/pin', { preHandler: authenticateVerified }, async (req) => {
@@ -270,16 +303,16 @@ export async function messageRoutes(app: FastifyInstance) {
       }
       await t.q(`update messages set pinned_at = $2, pinned_by = $3 where id = $1`, [id, pinned ? new Date() : null, pinned ? req.auth.userId : null]);
       const message = (await loadMessage(t, id))!;
-      t.emit(await activeMemberIds(t, conv.id), 'message.update', { message });
+      await emitMessage(t, conv.kind, await activeMemberIds(t, conv.id), 'message.update', message);
       return { message };
     });
   });
 
   app.get('/api/conversations/:id/pinned', { preHandler: authenticateVerified }, async (req) => {
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
-    await requireMember(pool, id, req.auth.userId);
+    const pc = await requireMember(pool, id, req.auth.userId);
     const { rows } = await q(`select ${MESSAGE_COLS} from messages m ${MESSAGE_JOINS} where m.conversation_id = $1 and m.pinned_at is not null and m.deleted_for_all_at is null order by m.pinned_at desc`, [id]);
-    return { messages: rows.map(toMessage) };
+    return { messages: rows.map((r) => (isMasked(pc) ? maskMsg(toMessage(r)) : toMessage(r))) };
   });
 
   app.post('/api/messages/:id/forward', { preHandler: authenticateVerified }, async (req) => {

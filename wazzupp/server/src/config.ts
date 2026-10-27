@@ -48,6 +48,7 @@ export const config = {
     turnSecret: env.TURN_SECRET || '',
   },
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+  tenorApiKey: env.TENOR_API_KEY || '',
   adminEmails: (env.ADMIN_EMAILS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   rateLimitDisabled: env.RATE_LIMIT_DISABLED === 'true' && !isProd,
 };

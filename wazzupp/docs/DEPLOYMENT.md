@@ -16,6 +16,7 @@
 | `STUN_URLS`, `TURN_URLS`, `TURN_SECRET` | ICE servers; `TURN_SECRET` is coturn's `static-auth-secret` |
 | `REQUIRE_VERIFICATION` | default `true` |
 | `ANTHROPIC_API_KEY` | optional AI drafting (also needs the `ai_tools` flag) |
+| `TENOR_API_KEY` | optional GIF search (proxied through the server; off if unset) |
 | `ADMIN_EMAILS` | emails that become `admin` on registration (bootstrap) |
 | `PORT`, `HOST` | listen address |
 

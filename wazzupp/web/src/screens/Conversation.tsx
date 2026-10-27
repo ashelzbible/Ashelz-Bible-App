@@ -209,9 +209,9 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
           {thread?.loaded && !thread.hasMore && list.length ? <div className="enc-note"><Icon name="shield" size={14} />Messages are protected in transit (TLS) and stored with access controls. End-to-end encryption is not enabled yet.</div> : null}
           {rows.map((r) => r.type === 'day' ? <div className="day-sep" key={r.key}><span>{r.label}</span></div>
             : r.type === 'unread' ? <div className="unread-sep" key={r.key}><span>{r.label}</span></div>
-            : <Bubble key={r.key} m={r.m!} mine={r.m!.senderId === me.id} showSender={isGroup && !!r.first && r.m!.senderId !== me.id} senderName={memberOf(r.m!.senderId)?.displayName ?? 'Someone'} senderId={r.m!.senderId ?? undefined}
+            : <Bubble key={r.key} m={r.m!} mine={r.m!.senderId === me.id} showSender={isGroup && conv.kind !== 'channel' && !!r.first && r.m!.senderId !== me.id} senderName={memberOf(r.m!.senderId)?.displayName ?? 'Someone'} senderId={r.m!.senderId ?? undefined}
                 senderAvatar={memberOf(r.m!.senderId)?.avatarMediaId} first={!!r.first} last={!!r.last} status={statusOf(r.m!)} meId={me.id} onMenu={openMenu} onReact={react} onReplyJump={jumpTo} onOpenMedia={openMedia} onRetry={retry} onSwipeReply={swipe}
-                highlight={highlight === r.m!.id} nameOf={nameOf} isGroup={isGroup} />)}
+                highlight={highlight === r.m!.id} nameOf={nameOf} isGroup={isGroup && conv.kind !== 'channel'} />)}
           {typingUsers.length ? <div className="typing-bubble" aria-hidden="true"><i /><i /><i /></div> : null}
         </div>
         {!atBottom ? <button className="to-bottom" onClick={() => { const el = scroller.current!; el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); if (thread?.hasMore && list[list.length - 1]?.seq < conv.lastSeq) void loadMessages(id); }} aria-label="Scroll to latest">{conv.unread ? <span className="badge">{conv.unread}</span> : null}<Icon name="down" size={22} /></button> : null}

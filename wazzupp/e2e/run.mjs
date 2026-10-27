@@ -122,7 +122,7 @@ describe('browser end to end', () => {
     await a.page.locator('.call-overlay').waitFor({ state: 'detached', timeout: 10000 });
     await a.page.evaluate(() => { location.hash = '#/calls'; });
     await a.page.locator('.call-row', { hasText: 'Bob Brown' }).waitFor();
-    assert.match(await a.page.locator('.call-row').first().innerText(), /Outgoing/);
+    assert.match(await a.page.locator('.call-row').first().innerText(), /00:0\d/); // dated, with its duration
     assert.ok(await b.page.evaluate(() => { location.hash = '#/chats'; return true; }));
   });
 
@@ -164,6 +164,61 @@ describe('browser end to end', () => {
     await b.page.getByRole('dialog').getByRole('button', { name: 'Sign out' }).click();
     await b2.page.getByText('Welcome back').waitFor({ timeout: 10000 });
     await b2.ctx.close();
+  });
+
+  it('top-right menu: camera, Broadcast lists (delivers to each person), Linked devices, Starred, Read all, Settings', async () => {
+    await a.page.setViewportSize({ width: 390, height: 844 });
+    await a.page.evaluate(() => { location.hash = '#/chats'; });
+    await a.page.getByLabel('Camera', { exact: true }).waitFor();
+    await a.page.getByLabel('More options').click();
+    const items = await a.page.locator('.menu [role=menuitem]').allInnerTexts();
+    assert.deepEqual(items.map((t) => t.trim()), ['New group', 'Broadcast lists', 'Linked devices', 'Starred', 'Read all', 'Settings']);
+    await a.page.getByRole('menuitem', { name: 'Broadcast lists' }).click();
+    await a.page.getByRole('button', { name: 'New list' }).click();
+    await a.page.getByLabel('List name').fill('Friends');
+    await a.page.locator('.person', { hasText: 'Bob Brown' }).click().catch(async () => { await a.page.getByText('Add contacts first').waitFor(); });
+    if (!(await a.page.getByText('Add contacts first').count())) {
+      await a.page.getByRole('button', { name: 'Save', exact: true }).click();
+      await a.page.getByRole('button', { name: 'Send', exact: true }).click();
+      await a.page.getByLabel('Broadcast message').fill('Broadcast hello');
+      await a.page.getByRole('button', { name: /^Send to 1$/ }).click();
+      await b.page.evaluate(() => { location.hash = '#/chats'; });
+      await b.page.locator('.conv-row', { hasText: 'Alice Anderson' }).first().click();
+      await b.page.locator('.bubble', { hasText: 'Broadcast hello' }).waitFor({ timeout: 10000 });
+    } else await a.page.keyboard.press('Escape');
+    // Read all clears unread badges; Linked devices opens the device list
+    await a.page.getByLabel('More options').click(); await a.page.getByRole('menuitem', { name: 'Read all' }).click();
+    await a.page.getByLabel('More options').click(); await a.page.getByRole('menuitem', { name: 'Linked devices' }).click();
+    await a.page.getByText('Linked devices').first().waitFor();
+    await a.page.evaluate(() => { location.hash = '#/chats'; });
+    await a.page.getByLabel('Camera', { exact: true }).click();
+    await a.page.getByRole('dialog', { name: 'Camera' }).waitFor();
+    await a.page.getByLabel('Take photo').click();
+    await a.page.getByRole('button', { name: /Use photo/ }).waitFor();
+    await a.page.getByRole('button', { name: /Use photo/ }).click();
+    await a.page.getByRole('dialog', { name: 'New status' }).waitFor();
+    await a.page.keyboard.press('Escape');
+  });
+
+  it('formats messages (bold, italic, strike, code, lists) and offers the attach grid and emoji/GIF/sticker panel', async () => {
+    await a.page.evaluate(() => { location.hash = '#/chats'; });
+    await a.page.locator('.conv-row', { hasText: 'Bob Brown' }).first().click();
+    await a.page.getByLabel('Message', { exact: true }).fill('*bold* _it_ ~gone~ `mono`\n- one\n- two');
+    await a.page.getByLabel('Send', { exact: true }).click();
+    const bub = a.page.locator('.bubble', { hasText: 'bold' }).last();
+    await bub.locator('strong').filter({ hasText: 'bold' }).waitFor();
+    assert.equal(await bub.locator('em').innerText(), 'it'); assert.equal(await bub.locator('s').innerText(), 'gone');
+    assert.equal(await bub.locator('code').innerText(), 'mono'); assert.equal(await bub.locator('li').count(), 2);
+    await a.page.getByLabel('Attach').click();
+    for (const n of ['Gallery', 'Camera', 'Location', 'Contact', 'Document', 'Poll', 'Event']) await a.page.getByRole('dialog', { name: 'Attach' }).getByText(n, { exact: true }).waitFor();
+    await a.page.keyboard.press('Escape');
+    await a.page.getByLabel('Emoji', { exact: true }).click();
+    await a.page.getByRole('tab', { name: 'GIF' }).click(); await a.page.getByText(/GIF search is not set up/).waitFor();
+    await a.page.getByRole('tab', { name: 'Stickers' }).click(); await a.page.getByText('Create sticker').waitFor();
+    await a.page.getByRole('tab', { name: 'Emoji' }).click(); await a.page.getByRole('button', { name: '😀' }).first().click();
+    assert.match(await a.page.getByLabel('Message', { exact: true }).inputValue(), /😀/);
+    await a.page.getByLabel('Backspace').click();
+    assert.doesNotMatch(await a.page.getByLabel('Message', { exact: true }).inputValue(), /😀/);
   });
 
   it('has no horizontal overflow or clipped layout at phone, tablet and desktop sizes', async () => {

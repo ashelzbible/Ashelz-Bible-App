@@ -8,7 +8,7 @@ import { config } from '../config.ts';
 import { activeMemberIds, requireMember } from '../lib/conv.ts';
 import { removeMediaIfUnreferenced } from './media.ts';
 import { purgeExpiredStatuses } from './status.ts';
-import { ringTimeout } from './calls.ts';
+import { remindDueCalls, ringTimeout } from './calls.ts';
 import { sendMessage } from './messages.ts';
 
 /** Durable job queue on Postgres: SKIP LOCKED claiming, retry with exponential backoff, dead-letter state after max attempts. */
@@ -28,7 +28,7 @@ const handlers: Record<string, Handler> = {
     await q(`delete from background_jobs where state = 'done' and created_at < now() - interval '2 days'`);
     await q(`delete from outbox where created_at < now() - interval '30 days'`);
   },
-  send_scheduled: async () => { await sendDueScheduled(); },
+  send_scheduled: async () => { await sendDueScheduled(); await remindDueCalls(); },
 };
 
 export async function sweepExpiredMessages() {

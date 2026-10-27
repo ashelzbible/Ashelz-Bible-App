@@ -2,7 +2,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Client, PNG, Socket, dm, group, newUser, q, say, sleep, start, type Ctx } from './helpers.ts';
-import { ringTimeout } from '../src/modules/calls.ts';
+import { remindDueCalls, ringTimeout } from '../src/modules/calls.ts';
 import { purgeExpiredStatuses } from '../src/modules/status.ts';
 import { setPushSender, type PushPayload } from '../src/modules/notify.ts';
 import { runDueJobs } from '../src/modules/jobs.ts';
@@ -76,6 +76,45 @@ describe('calls', () => {
     assert.equal((await b.get('/api/calls/active')).body.call, null);
   });
 
+  it('clears the call log for one user only', async () => {
+    const a = await newUser(ctx, 'a'); const b = await newUser(ctx, 'b');
+    const conv = await dm(a, b);
+    const c = (await a.post('/api/calls', { conversationId: conv, kind: 'audio' })).body.call;
+    await a.post(`/api/calls/${c.id}/cancel`);
+    const live = (await a.post('/api/calls', { conversationId: conv, kind: 'audio' })).body.call; // still ringing: must survive a clear
+    assert.equal((await a.get('/api/calls')).body.calls.length, 2);
+    assert.equal((await a.del('/api/calls')).status, 204);
+    const left = (await a.get('/api/calls')).body.calls;
+    assert.deepEqual(left.map((x: any) => x.id), [live.id]);
+    assert.equal((await b.get('/api/calls')).body.calls.length, 2, "the other person's log is untouched");
+    await a.post(`/api/calls/${live.id}/cancel`);
+  });
+
+  it('schedules calls, lists them for both people, enforces membership, and sends reminders when due', async () => {
+    const a = await newUser(ctx, 'a'); const b = await newUser(ctx, 'b'); const eve = await newUser(ctx, 'eve');
+    const conv = await dm(a, b);
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    assert.equal((await a.post('/api/calls/scheduled', { conversationId: conv, kind: 'video', startsAt: new Date(Date.now() - 1000).toISOString() })).status, 400);
+    assert.equal((await eve.post('/api/calls/scheduled', { conversationId: conv, kind: 'video', startsAt: at })).status, 404, 'non-members cannot schedule');
+    const r = await a.post('/api/calls/scheduled', { conversationId: conv, kind: 'video', startsAt: at, note: 'Project review' });
+    assert.equal(r.status, 201);
+    const mine = (await a.get('/api/calls/scheduled')).body.scheduled; const theirs = (await b.get('/api/calls/scheduled')).body.scheduled;
+    assert.equal(mine.length, 1); assert.equal(mine[0].createdByMe, true); assert.equal(theirs[0].createdByMe, false); assert.equal(theirs[0].other.id, a.user.id);
+    assert.equal((await eve.get('/api/calls/scheduled')).body.scheduled.length, 0);
+    assert.equal((await eve.del(`/api/calls/scheduled/${r.body.id}`)).status, 404);
+    await q(`update scheduled_calls set starts_at = now() - interval '1 second' where id = $1`, [r.body.id]);
+    const sa = await Socket.connect(ctx, a.token);
+    assert.equal(await remindDueCalls(), 1);
+    assert.equal(await remindDueCalls(), 0, 'each reminder fires once');
+    assert.equal((await sa.event('call.reminder')).payload.note, 'Project review');
+    for (const u of [a, b]) assert.ok((await u.get('/api/notifications')).body.notifications.some((n: any) => n.kind === 'call_reminder'));
+    assert.equal((await a.get('/api/calls/scheduled')).body.scheduled.length, 0);
+    sa.close();
+    const r2 = await a.post('/api/calls/scheduled', { conversationId: conv, kind: 'audio', startsAt: at });
+    assert.equal((await b.del(`/api/calls/scheduled/${r2.body.id}`)).status, 204, 'either participant can cancel');
+    assert.equal((await a.get('/api/calls/scheduled')).body.scheduled.length, 0);
+  });
+
   it('serves ICE servers, with time-limited TURN credentials when TURN is configured', async () => {
     const a = await newUser(ctx, 'a');
     const stunOnly = (await a.get('/api/calls/ice')).body;
@@ -106,7 +145,7 @@ describe('status updates', () => {
     const mine = (await owner.get('/api/status/mine')).body.items[0];
     assert.equal(mine.viewers.length, 1); assert.equal(mine.viewers[0].reaction, '🔥');
     const reply = await friend.post(`/api/status/${s.body.id}/reply`, { body: 'Nice one' });
-    assert.equal(reply.status, 200); assert.match(reply.body.message.body, /Good vibes only/);
+    assert.equal(reply.status, 200); assert.equal(reply.body.message.body, 'Nice one'); assert.match(reply.body.message.meta.statusReply.text, /Good vibes only/); assert.equal(reply.body.message.meta.statusReply.kind, 'text');
     // Expiry is enforced at read time, before any cleanup job runs.
     await q(`update status_updates set expires_at = now() - interval '1 second' where id = $1`, [s.body.id]);
     assert.equal((await friend.get('/api/status')).body.feed.length, 0);
@@ -374,5 +413,38 @@ describe('key directory and misc', () => {
     await show.patch('/api/me/settings', { patch: { privacy: { discoverable: true } } });
     const r = await a.post('/api/contacts/sync', { phones: ['+27820000001', '+27820000002', '+27829999999'] });
     assert.deepEqual(r.body.matches.map((m: any) => m.username), ['sync_show']);
+  });
+  it('supports voice statuses, per-status fonts, and a personal music library with song-backed updates', async () => {
+    const owner = await newUser(ctx, 'mus_owner'); const friend = await newUser(ctx, 'mus_friend'); const stranger = await newUser(ctx, 'mus_stranger');
+    await owner.put(`/api/contacts/${friend.user.id}`, {});
+    // a tiny valid WAV file stands in for a song
+    const wav = Buffer.alloc(44 + 800); wav.write('RIFF', 0); wav.writeUInt32LE(36 + 800, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(800, 40);
+    const song = await owner.upload(wav, 'song.wav', 'audio'); assert.equal(song.status, 201);
+    const mediaId = song.body.media.id;
+    assert.equal((await friend.post('/api/music', { mediaId, title: 'Not mine' })).status, 400, 'only the owner of an audio file can add it');
+    const added = await owner.post('/api/music', { mediaId, title: 'Sunrise', artist: 'The Tests', mood: 'Happy', genre: 'Pop' }); assert.equal(added.status, 201);
+    assert.equal((await owner.get('/api/music?tab=suggested')).body.tracks.length, 1);
+    assert.equal((await owner.get('/api/music?tab=starred')).body.tracks.length, 0);
+    assert.equal((await owner.patch(`/api/music/${added.body.id}`, { starred: true })).status, 204);
+    assert.equal((await owner.get('/api/music?tab=starred&q=sun')).body.tracks.length, 1);
+    assert.equal((await friend.get('/api/music')).body.tracks.length, 0, 'libraries are private');
+    // song on a photo status: viewers get access to the audio only while the status is visible to them
+    const img = await owner.upload(PNG, 'p.png', 'image');
+    assert.equal((await owner.post('/api/status', { kind: 'text', body: 'x', audioMediaId: mediaId })).status, 400, 'music needs a photo or video');
+    const st = await owner.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioMediaId: mediaId, audioTitle: 'Sunrise · The Tests' }); assert.equal(st.status, 201);
+    const item = (await friend.get('/api/status')).body.feed[0].items[0];
+    assert.equal(item.audioMediaId, mediaId); assert.equal(item.audioTitle, 'Sunrise · The Tests');
+    assert.equal((await friend.post('/api/media/urls', { ids: [mediaId] })).body.urls[mediaId] != null, true);
+    assert.equal((await stranger.post('/api/media/urls', { ids: [mediaId] })).body.urls[mediaId] == null, true);
+    // voice and fonts
+    const v = await owner.upload(wav, 'v.wav', 'voice'); assert.equal(v.status, 201);
+    assert.equal((await owner.post('/api/status', { kind: 'voice', mediaId: v.body.media.id, background: '#0B6E5C' })).status, 201);
+    assert.equal((await owner.post('/api/status', { kind: 'text', body: 'fancy', font: 3, background: '#003B32' })).status, 201);
+    assert.equal((await owner.post('/api/status', { kind: 'text', body: 'bad', font: 99 })).status, 400);
+    const items = (await friend.get('/api/status')).body.feed[0].items;
+    assert.ok(items.some((i: any) => i.kind === 'voice') && items.some((i: any) => i.font === 3));
+    // deleting the song removes it from the library but keeps it for the live status that uses it
+    assert.equal((await owner.del(`/api/music/${added.body.id}`)).status, 204);
+    assert.equal((await owner.get('/api/music')).body.tracks.length, 0);
   });
 });

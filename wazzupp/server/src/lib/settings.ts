@@ -14,6 +14,9 @@ export const settingsSchema = z.object({
     statusAudience: z.enum(['contacts', 'except', 'only']),
     linkPreviews: z.boolean(),
     discoverable: z.boolean(),
+    statusSharing: z.boolean(),
+    statusExcept: z.array(z.string().uuid()).max(500),
+    statusOnly: z.array(z.string().uuid()).max(500),
   }).partial(),
   notifications: z.object({
     messages: z.boolean(),
@@ -28,6 +31,8 @@ export const settingsSchema = z.object({
     fontSize: z.enum(['sm', 'md', 'lg']),
     wallpaper: z.enum(['doodle', 'plain', 'emerald']),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
+    highContrast: z.boolean(),
+    reduceMotion: z.boolean(),
   }).partial(),
   media: z.object({
     autoDownloadImages: z.boolean(), autoDownloadVideos: z.boolean(), autoDownloadDocuments: z.boolean(), dataSaver: z.boolean(),
@@ -38,9 +43,9 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_SETTINGS = {
-  privacy: { lastSeen: 'everyone', online: 'everyone', profilePhoto: 'everyone', about: 'everyone', phoneVisible: 'nobody', readReceipts: true, groupInvites: 'everyone', statusAudience: 'contacts', linkPreviews: true, discoverable: false },
+  privacy: { lastSeen: 'everyone', online: 'everyone', profilePhoto: 'everyone', about: 'everyone', phoneVisible: 'nobody', readReceipts: true, groupInvites: 'everyone', statusAudience: 'contacts', linkPreviews: true, discoverable: false, statusSharing: true, statusExcept: [], statusOnly: [] },
   notifications: { messages: true, groups: true, calls: true, previews: true, sound: true, quietHours: { enabled: false, start: '22:00', end: '07:00', utcOffsetMinutes: 0 } },
-  appearance: { theme: 'system', fontSize: 'md', wallpaper: 'doodle', language: 'en' },
+  appearance: { theme: 'system', fontSize: 'md', wallpaper: 'doodle', language: 'en', highContrast: false, reduceMotion: false },
   media: { autoDownloadImages: true, autoDownloadVideos: false, autoDownloadDocuments: false, dataSaver: false },
   statusTtlHours: 24,
 } as const;

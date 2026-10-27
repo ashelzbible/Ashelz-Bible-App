@@ -6,9 +6,11 @@ import { convTitle } from '../lib/format.ts';
 import { go } from '../lib/route.ts';
 import { guard, loadCommunities, loadContacts, openDirect, sendMessage, toastError, loadConversations } from '../lib/actions.ts';
 import { Avatar } from '../ui/Avatar.tsx';
-import { Icon } from '../ui/Icon.tsx';
+import { Icon, type IconName } from '../ui/Icon.tsx';
 import { Dialog } from '../ui/Overlay.tsx';
+import { ChannelArt } from '../ui/Art.tsx';
 
+const uid = () => crypto.randomUUID();
 interface UserHit { id: string; username: string; displayName: string; avatarMediaId: string | null }
 
 function useUserSearch(q: string) {
@@ -73,8 +75,8 @@ export function NewGroupDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function NewCommunityDialog({ onClose }: { onClose: () => void }) {
-  const [type, setType] = useState<'community' | 'channel'>('community'); const [name, setName] = useState(''); const [desc, setDesc] = useState(''); const [pub, setPub] = useState(false); const [busy, setBusy] = useState(false);
+export function NewCommunityDialog({ onClose, initial = 'community' }: { onClose: () => void; initial?: 'community' | 'channel' }) {
+  const [type, setType] = useState<'community' | 'channel'>(initial); const [name, setName] = useState(''); const [desc, setDesc] = useState(''); const [pub, setPub] = useState(initial === 'channel'); const [busy, setBusy] = useState(false);
   return (
     <Dialog title="Create" onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!name.trim() || busy} onClick={async () => {
       setBusy(true);
@@ -156,3 +158,88 @@ export function ScheduleDialog({ convId, initial, onClose, onDone }: { convId: s
   );
 }
 void getState;
+
+// ---------------------------------------------------------------- broadcast lists
+interface BList { id: string; name: string; ids: string[] }
+const bKey = (me: string) => `wz.broadcast.${me}`;
+const readLists = (me: string): BList[] => { try { return JSON.parse(localStorage.getItem(bKey(me)) ?? '[]'); } catch { return []; } };
+const writeLists = (me: string, l: BList[]) => { try { localStorage.setItem(bKey(me), JSON.stringify(l)); } catch { /* storage unavailable: lists last for this session only */ } };
+const sessionLists: Record<string, BList[]> = {};
+
+/**
+ * Broadcast lists: write one message and it is delivered to each person in the list as an ordinary private chat message
+ * (recipients see a normal message from you and cannot see who else received it). Lists are stored on this device.
+ */
+export function BroadcastDialog({ onClose }: { onClose: () => void }) {
+  const me = useStore((s) => s.me!.id);
+  const contacts = useStore((s) => s.contacts);
+  const [lists, setLists] = useState<BList[]>(() => sessionLists[me] ?? readLists(me));
+  const [view, setView] = useState<null | { id: string | null }>(null);
+  const [name, setName] = useState(''); const [sel, setSel] = useState<Set<string>>(new Set());
+  const [text, setText] = useState(''); const [sendTo, setSendTo] = useState<BList | null>(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { void loadContacts(); }, []);
+  const save = (l: BList[]) => { setLists(l); sessionLists[me] = l; writeLists(me, l); };
+
+  if (sendTo) {
+    return (
+      <Dialog title={`Broadcast to ${sendTo.name}`} onClose={onClose} footer={<><button className="btn btn-ghost" onClick={() => setSendTo(null)}>Back</button><button className="btn btn-primary" disabled={!text.trim() || busy} onClick={async () => {
+        setBusy(true); let n = 0;
+        for (const uid of sendTo.ids) { try { const cid = await openDirect(uid); sendMessage(cid, { kind: 'text', body: text.trim() }); n++; } catch { /* skip people who can't be reached (blocked, deleted) */ } }
+        setBusy(false); toast(`Sent to ${n} of ${sendTo.ids.length} people`); onClose();
+      }}>{busy ? 'Sending…' : `Send to ${sendTo.ids.length}`}</button></>}>
+        <p className="muted">Each person receives this as a normal private message. They cannot see who else got it.</p>
+        <textarea className="textarea" autoFocus maxLength={8000} placeholder="Type your message" value={text} aria-label="Broadcast message" onChange={(e) => setText(e.target.value)} />
+      </Dialog>
+    );
+  }
+  if (view) {
+    return (
+      <Dialog title={view.id ? 'Edit list' : 'New broadcast list'} onClose={onClose} footer={<><button className="btn btn-ghost" onClick={() => setView(null)}>Back</button>
+        {view.id ? <button className="btn btn-danger-ghost" onClick={() => { save(lists.filter((l) => l.id !== view.id)); setView(null); }}>Delete list</button> : null}
+        <button className="btn btn-primary" disabled={!name.trim() || sel.size < 1} onClick={() => { const item = { id: view.id ?? uid(), name: name.trim(), ids: [...sel] }; save(view.id ? lists.map((l) => (l.id === view.id ? item : l)) : [...lists, item]); setView(null); }}>Save</button></>}>
+        <label className="field"><span className="label-t">List name</span><input className="input" autoFocus maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Family updates" /></label>
+        <div className="field"><span className="label-t">Recipients ({sel.size})</span>
+          <div className="stack-sm" style={{ maxHeight: 260, overflow: 'auto' }}>{contacts.length ? contacts.map((c) => <PersonRow key={c.id} u={c} selected={sel.has(c.id)} onClick={() => setSel((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} />) : <p className="help">Add contacts first, then build a list.</p>}</div></div>
+      </Dialog>
+    );
+  }
+  return (
+    <Dialog title="Broadcast lists" onClose={onClose}>
+      <p className="muted">Send one message to many people at once. They get it as a private chat, not a group.</p>
+      <div className="stack-sm">{lists.map((l) => (
+        <div key={l.id} className="person"><span className="action-ico"><Icon name="megaphone" size={20} /></span>
+          <span className="grow" style={{ textAlign: 'left' }}><b className="truncate" style={{ display: 'block' }}>{l.name}</b><small className="muted">{l.ids.length} recipients</small></span>
+          <button className="btn btn-soft btn-sm" onClick={() => { setText(''); setSendTo(l); }}>Send</button>
+          <button className="icon-btn" aria-label={`Edit ${l.name}`} onClick={() => { setName(l.name); setSel(new Set(l.ids)); setView({ id: l.id }); }}><Icon name="edit" size={18} /></button></div>))}
+        {!lists.length ? <p className="help">No lists yet.</p> : null}</div>
+      <button className="btn btn-primary" onClick={() => { setName(''); setSel(new Set()); setView({ id: null }); }}><Icon name="plus" size={18} />New list</button>
+    </Dialog>
+  );
+}
+
+/** Shown before creating a channel: what channels are and what the creator is responsible for. */
+export function ChannelIntroSheet({ onContinue, onClose }: { onContinue: () => void; onClose: () => void }) {
+  const rows: Array<[IconName, string, React.ReactNode]> = [
+    ['globe', 'Anyone can discover your channel', 'Public channels can be found by anyone, who can then read the channel’s history.'],
+    ['eye-off', 'People see your channel, not you', 'Subscribers can’t see your name, username or profile picture, but other admins can.'],
+    ['shield', 'You’re responsible for your channel', <>Your channel needs to follow the community rules, and can be reported and removed by moderators.</>],
+  ];
+  return (
+    <Dialog title="" onClose={onClose} width={460} footer={<button className="btn btn-primary btn-block" style={{ height: 52 }} onClick={onContinue}>Continue</button>}>
+      <div className="intro-art"><ChannelArt /></div>
+      <h2 className="intro-title">Create a channel to reach unlimited followers</h2>
+      <ul className="intro-list">{rows.map(([i, t, d]) => <li key={t}><span><Icon name={i} size={26} /></span><div><b>{t}</b><p>{d}</p></div></li>)}</ul>
+    </Dialog>
+  );
+}
+
+/** What a community could look like, so people can see the idea before building one. */
+export function CommunityExamplesDialog({ onClose, onStart }: { onClose: () => void; onStart: () => void }) {
+  const ex = [['School parents', 'Announcements from the school, plus one group per class and one for the sports committee.'], ['Neighbourhood watch', 'Safety alerts to everyone, with a group for each street and a group for events.'], ['Book club', 'Monthly announcements, with a group per reading list and one for socials.'], ['Football team', 'Fixtures from the coach, a group for players and a group for supporters.']];
+  return (
+    <Dialog title="Example communities" onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Close</button><button className="btn btn-primary" onClick={() => { onClose(); onStart(); }}>Start your community</button></>}>
+      <ul className="stack">{ex.map(([n, d]) => <li key={n} className="example"><span className="tile sm" style={{ background: 'linear-gradient(145deg,#2BC48A,#0E8A5F)' }}><Icon name="users" size={22} /></span><div><b>{n}</b><p className="muted">{d}</p></div></li>)}</ul>
+      <p className="help">Every community has an announcement group that only admins can post to, and members can join any group linked to it.</p>
+    </Dialog>
+  );
+}

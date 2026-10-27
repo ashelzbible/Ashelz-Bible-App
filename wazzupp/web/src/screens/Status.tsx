@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, uploadWithProgress } from '../lib/api.ts';
-import { ago, clock } from '../lib/format.ts';
+import { ago, clock, listTime } from '../lib/format.ts';
 import { back, go, useLayout, useRoute } from '../lib/route.ts';
 import { getState, toast, useStore } from '../lib/store.ts';
 import type { StatusGroup, StatusItem } from '../lib/types.ts';
-import { guard, loadStatus, toastError } from '../lib/actions.ts';
+import { guard, loadConversations, loadStatus, toastError } from '../lib/actions.ts';
+import { ChannelIntroSheet, NewCommunityDialog } from './Dialogs.tsx';
 import { useMedia } from '../lib/mediaCache.ts';
-import { Avatar } from '../ui/Avatar.tsx';
+import { Avatar, StatusAvatar } from '../ui/Avatar.tsx';
 import { Icon } from '../ui/Icon.tsx';
 import { Empty } from '../ui/Misc.tsx';
 import { Dialog, useMenu } from '../ui/Overlay.tsx';
 import { PaneFrame } from './Frame.tsx';
+import { BGS, FONTS, StatusCreate } from './StatusEditor.tsx';
 
-const BGS = ['#003B32', '#0B6E5C', '#1B5E8A', '#6A3A8C', '#B34A2E', '#8C6A1B', '#2E2E2E'];
+
 
 export function StatusStrip() {
   const feed = useStore((s) => s.statusFeed); const me = useStore((s) => s.me!); const mine = useStore((s) => s.myStatus);
@@ -26,46 +28,94 @@ export function StatusStrip() {
 
 export function StatusList() {
   const feed = useStore((s) => s.statusFeed); const me = useStore((s) => s.me!); const mine = useStore((s) => s.myStatus); const route = useRoute(); const layout = useLayout();
-  const [creating, setCreating] = useState(false);
+  const convs = useStore((s) => s.convs);
+  const [creating, setCreating] = useState<null | 'text' | 'camera' | 'media'>(null); const [captured, setCaptured] = useState<File | null>(null); const [searching, setSearching] = useState(false); const [q, setQ] = useState('');
+  const [dlg, setDlg] = useState<null | 'channel' | 'channel-form' | 'privacy' | 'explore'>(null);
+  const menu = useMenu();
   useEffect(() => { void loadStatus(); }, []);
-  useEffect(() => { if (route.id === 'new') setCreating(true); }, [route.id]);
-  const recent = feed.filter((g) => !g.allViewed && !g.muted); const viewed = feed.filter((g) => g.allViewed && !g.muted); const muted = feed.filter((g) => g.muted);
+  useEffect(() => { if (route.id === 'new') setCreating(route.sub === 'camera' ? 'camera' : 'media'); }, [route.id, route.sub]);
+  const match = (g: StatusGroup) => !q || g.displayName.toLowerCase().includes(q.toLowerCase());
+  const recent = feed.filter((g) => !g.allViewed && !g.muted && match(g)); const viewed = feed.filter((g) => g.allViewed && !g.muted && match(g)); const muted = feed.filter((g) => g.muted && match(g));
+  const channels = Object.values(convs).filter((c) => c.kind === 'channel' && (!q || (c.title ?? '').toLowerCase().includes(q.toLowerCase())));
+  const seenCount = (g: StatusGroup) => g.items.filter((i) => i.viewed).length;
   const Row = (g: StatusGroup) => (
     <li key={g.userId}><button className={`conv-row ${route.tab === 'status' && route.id === g.userId && layout !== 'mobile' ? 'sel' : ''}`} onClick={() => go(`status/${g.userId}`)}>
-      <Avatar id={g.userId} name={g.displayName} mediaId={g.avatarMediaId} size={50} ring seen={g.allViewed} />
-      <span className="conv-main"><span className="conv-name truncate">{g.displayName}</span><span className="conv-prev">{ago(g.latestAt)}</span></span></button></li>);
+      <StatusAvatar id={g.userId} name={g.displayName} mediaId={g.avatarMediaId} size={50} total={g.items.length} viewed={seenCount(g)} />
+      <span className="conv-main"><span className="conv-name truncate">{g.displayName}</span><span className="conv-prev">{listTime(g.latestAt)}</span></span></button></li>);
+  const actions = (<>
+    <button className="icon-btn on-dark" aria-label="Search updates" onClick={() => setSearching((v) => !v)}><Icon name="search" /></button>
+    <button className="icon-btn on-dark" aria-label="More options" onClick={(e) => menu.open([
+      { label: 'Create channel', icon: 'megaphone', onClick: () => setDlg('channel') },
+      { label: 'Status privacy', icon: 'lock', onClick: () => go('settings/status-privacy') },
+      { label: 'Starred', icon: 'star', onClick: () => go('settings/starred') },
+      { label: 'Settings', icon: 'settings', onClick: () => go('settings') },
+    ], e)}><Icon name="more" /></button></>);
+  const fabs = layout !== 'desktop' ? (<>
+    <button className="fab fab-small" onClick={() => setCreating('text')} aria-label="Write a text status"><Icon name="pen" size={22} /></button>
+    <button className="fab" onClick={() => setCreating('camera')} aria-label="Add photo or video status"><span className="fab-ico"><Icon name="camera" size={26} /><i>+</i></span></button></>) : undefined;
+  const close = () => { const viaRoute = route.id === 'new'; setCreating(null); if (viaRoute) { if (route.sub === 'camera') back(); else go('status'); } };
   return (
-    <PaneFrame title="Status" actions={<button className="icon-btn on-dark" onClick={() => setCreating(true)} aria-label="Add status"><Icon name="plus" /></button>}>
+    <PaneFrame title="Updates" plain actions={actions} overlay={fabs}>
+      {searching ? <div className="m-search call-search"><Icon name="search" size={18} /><input autoFocus placeholder="Search updates" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search updates" /></div> : null}
+      <h2 className="section-h">Status</h2>
       <ul className="conv-list">
-        <li><button className="conv-row" onClick={() => (mine.length ? go('status/me') : setCreating(true))}>
-          <span style={{ position: 'relative' }}><Avatar id={me.id} name={me.displayName} mediaId={me.avatarMediaId} size={52} ring={mine.length > 0} />{!mine.length ? <i className="plus-badge"><Icon name="plus" size={14} stroke={3} /></i> : null}</span>
-          <span className="conv-main"><span className="conv-name">My status</span><span className="conv-prev">{mine.length ? `${mine.length} update${mine.length > 1 ? 's' : ''} · ${ago(mine[mine.length - 1].createdAt)}` : 'Tap to add status update'}</span></span></button></li>
+        <li><button className="conv-row" onClick={() => (mine.length ? go('status/me') : setCreating('media'))}>
+          <span style={{ position: 'relative', display: 'inline-flex' }}><StatusAvatar id={me.id} name={me.displayName} mediaId={me.avatarMediaId} size={50} total={mine.length} viewed={mine.length} />{!mine.length ? <i className="plus-badge"><Icon name="plus" size={14} stroke={3} /></i> : null}</span>
+          <span className="conv-main"><span className="conv-name">My status</span><span className="conv-prev">{mine.length ? listTime(mine[mine.length - 1].createdAt) : 'Tap to add status update'}</span></span></button></li>
       </ul>
-      {recent.length ? <><h4 className="list-sub">Recent updates</h4><ul className="conv-list">{recent.map(Row)}</ul></> : null}
-      {viewed.length ? <><h4 className="list-sub">Viewed updates</h4><ul className="conv-list">{viewed.map(Row)}</ul></> : null}
-      {muted.length ? <><h4 className="list-sub">Muted updates</h4><ul className="conv-list">{muted.map(Row)}</ul></> : null}
-      {!feed.length ? <Empty icon="dashed" title="No updates yet" text="Status updates from your contacts disappear after 24 hours." /> : null}
-      {creating ? <StatusCreate onClose={() => { setCreating(false); if (route.id === 'new') go('status'); }} /> : null}
+      {recent.length ? <><h4 className="list-sub plain">Recent updates</h4><ul className="conv-list">{recent.map(Row)}</ul></> : null}
+      {viewed.length ? <><h4 className="list-sub plain">Viewed updates</h4><ul className="conv-list">{viewed.map(Row)}</ul></> : null}
+      {muted.length ? <><h4 className="list-sub plain">Muted updates</h4><ul className="conv-list">{muted.map(Row)}</ul></> : null}
+      {!feed.length ? <p className="help pad">Updates from your contacts disappear after 24 hours.</p> : null}
+      <div className="section-head-row"><h2 className="section-h">Channels</h2><button className="btn btn-soft btn-sm" onClick={() => setDlg('explore')}>Explore</button></div>
+      {channels.length ? <ul className="conv-list">{channels.map((c) => <li key={c.id}><button className="conv-row" onClick={() => go(`chats/${c.id}`)}><Avatar id={c.id} name={c.title ?? 'Channel'} mediaId={c.avatarMediaId} size={50} group /><span className="conv-main"><span className="conv-name truncate">{c.title}</span><span className="conv-prev">{c.memberCount} subscribers</span></span></button></li>)}</ul>
+        : <p className="help pad">Channels are one-way broadcasts from people and organisations. Explore to find some, or create your own from the menu.</p>}
+      {menu.node}
+      {creating ? <StatusCreate presetFile={captured} startText={creating === 'text'} onClose={() => { setCaptured(null); close(); }} /> : null}
+      {dlg === 'channel' ? <ChannelIntroSheet onClose={() => setDlg(null)} onContinue={() => setDlg('channel-form')} /> : null}
+      {dlg === 'channel-form' ? <NewCommunityDialog initial="channel" onClose={() => setDlg(null)} /> : null}
+      {dlg === 'explore' ? <ExploreChannelsDialog onClose={() => setDlg(null)} /> : null}
     </PaneFrame>
+  );
+}
+
+function ExploreChannelsDialog({ onClose }: { onClose: () => void }) {
+  const [q, setQ] = useState(''); const [res, setRes] = useState<{ channels: Array<{ id: string; title: string; members: number; avatarMediaId: string | null }> } | null>(null);
+  useEffect(() => { const t = setTimeout(() => api.get(`/api/communities/discover?q=${encodeURIComponent(q.trim())}`).then(setRes).catch(() => setRes({ channels: [] })), 250); return () => clearTimeout(t); }, [q]);
+  return (
+    <Dialog title="Explore channels" onClose={onClose}>
+      <div className="m-search light"><Icon name="search" size={18} /><input autoFocus placeholder="Search channels" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search channels" /></div>
+      <div className="stack-sm">{res?.channels.map((c) => (
+        <div key={c.id} className="person"><Avatar id={c.id} name={c.title} mediaId={c.avatarMediaId} size={44} group /><span className="grow" style={{ textAlign: 'left' }}><b className="truncate" style={{ display: 'block' }}>{c.title}</b><small className="muted">{c.members.toLocaleString()} subscribers</small></span>
+          <button className="btn btn-soft btn-sm" onClick={async () => { const r = await guard(api.post(`/api/channels/${c.id}/subscribe`)); if (r) { await loadConversations(); onClose(); go(`chats/${c.id}`); } }}>Subscribe</button></div>))}
+        {res && !res.channels.length ? <p className="help">No public channels found.</p> : null}</div>
+    </Dialog>
   );
 }
 
 export function StatusEmpty() { return <div className="conv-empty dark"><div className="empty"><div className="empty-art"><Icon name="dashed" size={38} stroke={1.6} /></div><h3>View status updates</h3><p>Click a contact to see their update. Updates last 24 hours.</p></div></div>; }
 
+function StatusSong({ id, paused, title }: { id: string; paused: boolean; title?: string }) {
+  const m = useMedia(id); const a = useRef<HTMLAudioElement>(null);
+  useEffect(() => { const el = a.current; if (!el) return; if (paused) el.pause(); else void el.play().catch(() => {}); }, [paused, m?.url]);
+  return <>{m ? <audio ref={a} src={m.url} autoPlay loop /> : null}<span className="story-song"><Icon name="music" size={14} /> {title || 'Music'}</span></>;
+}
+
 function Slide({ item, paused, onDone, onProgress }: { item: StatusItem; paused: boolean; onDone: () => void; onProgress: (p: number) => void }) {
   const m = useMedia(item.mediaId);
-  const acc = useRef(0); const last = useRef(performance.now()); const raf = useRef(0); const video = useRef<HTMLVideoElement>(null);
+  const acc = useRef(0); const last = useRef(performance.now()); const raf = useRef(0); const video = useRef<HTMLVideoElement>(null); const audio = useRef<HTMLAudioElement>(null);
   const DUR = item.kind === 'text' ? Math.min(12000, 4000 + item.body.length * 40) : 5500;
   useEffect(() => {
     acc.current = 0; last.current = performance.now(); onProgress(0);
-    if (item.kind === 'video') return;
+    if (item.kind === 'video' || item.kind === 'voice') return;
     const tick = (t: number) => { const dt = t - last.current; last.current = t; if (!paused && (item.kind === 'text' || m)) acc.current += dt; onProgress(Math.min(1, acc.current / DUR)); if (acc.current >= DUR) { onDone(); return; } raf.current = requestAnimationFrame(tick); };
     raf.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf.current);
   }, [item.id, paused, !!m]);  
-  useEffect(() => { const v = video.current; if (!v) return; if (paused) v.pause(); else void v.play().catch(() => {}); }, [paused]);
-  if (item.kind === 'text') return <div className="slide text" style={{ background: item.background ?? BGS[0] }}><p>{item.body}</p></div>;
+  useEffect(() => { const v = video.current ?? audio.current; if (!v) return; if (paused) v.pause(); else void v.play().catch(() => {}); }, [paused]);
+  if (item.kind === 'text') return <div className="slide text" style={{ background: item.background ?? BGS[0] }}><p style={{ fontFamily: FONTS[item.font ?? 0] }}>{item.body}</p></div>;
+  if (item.kind === 'voice') return <div className="slide text" style={{ background: item.background ?? BGS[1] }}>{m ? <div className="voice-slide"><Icon name="mic" size={56} /><audio ref={audio} src={m.url} controls autoPlay onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} /></div> : <div className="spinner" style={{ borderTopColor: '#fff' }} />}</div>;
   if (!m) return <div className="slide"><div className="spinner" style={{ borderTopColor: '#fff' }} /></div>;
-  return <div className="slide">{item.kind === 'image' ? <img src={m.url} alt={item.caption || 'Status'} /> : <video ref={video} src={m.url} autoPlay playsInline onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} />}</div>;
+  return <div className="slide">{item.audioMediaId ? <StatusSong id={item.audioMediaId} paused={paused} title={item.audioTitle} /> : null}{item.kind === 'image' ? <img src={m.url} alt={item.caption || 'Status'} /> : <video ref={video} src={m.url} autoPlay playsInline onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} />}</div>;
 }
 
 export function StatusViewer({ userId }: { userId: string }) {
@@ -98,7 +148,7 @@ export function StatusViewer({ userId }: { userId: string }) {
         </div>
       </div>
       <button className="story-nav l" onClick={prev} aria-label="Previous update" /><button className="story-nav r" onClick={next} aria-label="Next update" />
-      {item.kind !== 'text' && item.caption ? <p className="story-cap">{item.caption}</p> : null}
+      {item.kind !== 'text' && item.kind !== 'voice' && item.caption ? <p className="story-cap">{item.caption}</p> : null}
       <div className="story-foot" onPointerDown={(e) => e.stopPropagation()}>
         {isMine ? <button className="viewed-by" onClick={() => setViewers(true)}><Icon name="eye" size={18} />{mineItem?.viewers?.length ?? 0} {(mineItem?.viewers?.length ?? 0) === 1 ? 'view' : 'views'}</button>
           : <form className="story-reply" onSubmit={async (e) => { e.preventDefault(); if (!reply.trim()) return; const r = await guard(api.post(`/api/status/${item.id}/reply`, { body: reply.trim() })); if (r) { setReply(''); toast('Reply sent'); } }}>
@@ -113,40 +163,3 @@ export function StatusViewer({ userId }: { userId: string }) {
   );
 }
 
-export function StatusCreate({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<'text' | 'media'>('text'); const [text, setText] = useState(''); const [bg, setBg] = useState(BGS[0]); const [file, setFile] = useState<File | null>(null); const [caption, setCaption] = useState('');
-  const [progress, setProgress] = useState(0); const [busy, setBusy] = useState(false); const [aud, setAud] = useState<'contacts' | 'except' | 'only'>(getState().me!.settings.privacy.statusAudience as any); const [picked, setPicked] = useState<Set<string>>(new Set());
-  const contacts = useStore((s) => s.contacts); const fileRef = useRef<HTMLInputElement>(null); const [preview, setPreview] = useState<string | null>(null);
-  useEffect(() => { if (!file) { setPreview(null); return; } const u = URL.createObjectURL(file); setPreview(u); return () => URL.revokeObjectURL(u); }, [file]);
-  async function post() {
-    setBusy(true);
-    try {
-      let body: any = { kind: 'text', body: text.trim(), background: bg, audience: aud, audienceIds: [...picked] };
-      if (mode === 'media' && file) {
-        const kind = file.type.startsWith('video/') ? 'video' : 'image';
-        const up = uploadWithProgress(file, file.name, kind, {}, setProgress);
-        const r = await up.promise;
-        body = { kind, mediaId: r.media.id, caption: caption.trim(), audience: aud, audienceIds: [...picked] };
-      }
-      await api.post('/api/status', body); await loadStatus(); toast('Status posted'); onClose();
-    } catch (e) { toastError(e); } finally { setBusy(false); }
-  }
-  const ok = mode === 'text' ? text.trim().length > 0 : !!file;
-  return (
-    <Dialog title="New status" onClose={onClose} width={480} footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!ok || busy} onClick={post}>{busy ? (progress > 0 && progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : 'Posting…') : 'Post'}</button></>}>
-      <div className="seg"><button className={mode === 'text' ? 'on' : ''} onClick={() => setMode('text')}>Text</button><button className={mode === 'media' ? 'on' : ''} onClick={() => { setMode('media'); if (!file) fileRef.current?.click(); }}>Photo / video</button></div>
-      {mode === 'text' ? <>
-        <div className="status-compose" style={{ background: bg }}><textarea autoFocus maxLength={700} placeholder="Type a status" value={text} onChange={(e) => setText(e.target.value)} aria-label="Status text" /></div>
-        <div className="swatches">{BGS.map((c) => <button key={c} style={{ background: c }} className={bg === c ? 'on' : ''} onClick={() => setBg(c)} aria-label={`Background ${c}`} />)}</div>
-      </> : <>
-        <div className="status-compose media" onClick={() => fileRef.current?.click()}>{preview ? (file!.type.startsWith('video/') ? <video src={preview} muted playsInline /> : <img src={preview} alt="Selected" />) : <span className="muted"><Icon name="image" size={30} /><br />Choose a photo or video</span>}</div>
-        <input className="input" placeholder="Add a caption" maxLength={700} value={caption} onChange={(e) => setCaption(e.target.value)} />
-        <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" onChange={(e) => { setFile(e.target.files?.[0] ?? null); e.target.value = ''; }} />
-      </>}
-      <div className="field"><span className="label-t">Who can see this</span>
-        <select aria-label="Who can see this" className="select" value={aud} onChange={(e) => setAud(e.target.value as any)}><option value="contacts">My contacts</option><option value="except">My contacts except…</option><option value="only">Only share with…</option></select></div>
-      {aud !== 'contacts' ? <div className="stack-sm" style={{ maxHeight: 160, overflow: 'auto' }}>{contacts.map((c) => <label key={c.id} className="check-row"><input type="checkbox" checked={picked.has(c.id)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} />{c.displayName}</label>)}{!contacts.length ? <p className="help">Add contacts to choose an audience.</p> : null}</div> : null}
-      <p className="help">Updates disappear after 24 hours.</p>
-    </Dialog>
-  );
-}

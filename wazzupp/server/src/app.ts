@@ -24,6 +24,8 @@ import { adminRoutes } from './modules/admin.ts';
 import { keyRoutes } from './modules/keys.ts';
 import { jobRoutes } from './modules/jobs.ts';
 import { aiRoutes } from './modules/ai.ts';
+import { gifRoutes } from './modules/gifs.ts';
+import { musicRoutes } from './modules/music.ts';
 import { hub } from './lib/hub.ts';
 
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
@@ -37,7 +39,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(helmet, {
-    contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:'], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'", 'ws:', 'wss:'], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"] } },
+    contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', ...(config.tenorApiKey ? ['https://media.tenor.com', 'https://c.tenor.com'] : [])], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'", 'ws:', 'wss:'], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"] } },
     crossOriginResourcePolicy: { policy: 'same-origin' },
   });
   await app.register(cors, { origin: config.corsOrigins.length ? config.corsOrigins : false, credentials: false });
@@ -68,7 +70,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     catch { return reply.code(503).send({ ok: false, db: 'down' }); }
   });
 
-  for (const r of [authRoutes, userRoutes, conversationRoutes, messageRoutes, mediaRoutes, statusRoutes, callRoutes, searchRoutes, communityRoutes, adminRoutes, keyRoutes, jobRoutes, aiRoutes]) await app.register(r);
+  for (const r of [authRoutes, userRoutes, conversationRoutes, messageRoutes, mediaRoutes, statusRoutes, callRoutes, searchRoutes, communityRoutes, adminRoutes, keyRoutes, jobRoutes, aiRoutes, gifRoutes, musicRoutes]) await app.register(r);
 
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: { code: 'not_found', message: 'No such endpoint' } }));
 

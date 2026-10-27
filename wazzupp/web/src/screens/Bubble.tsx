@@ -17,16 +17,52 @@ export function Ticks({ status, size = 17 }: { status: 'sending' | 'queued' | 'f
 }
 
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/gi;
-function linkify(text: string, meName: string): ReactNode[] {
-  const out: ReactNode[] = []; let last = 0; let k = 0;
-  const parts = [...text.matchAll(URL_RE)];
+function plain(text: string, meName: string, k: { n: number }): ReactNode[] {
+  const out: ReactNode[] = []; let last = 0;
   const mention = (s: string) => s.split(/(@[\p{L}\p{N}_.]+)/u).map((p, i) => p.startsWith('@') ? <span key={i} className={`mention ${p.slice(1).toLowerCase() === meName.toLowerCase() ? 'me' : ''}`}>{p}</span> : p);
-  for (const m of parts) {
-    if (m.index! > last) out.push(<span key={k++}>{mention(text.slice(last, m.index))}</span>);
-    out.push(<a key={k++} href={m[0]} target="_blank" rel="noopener noreferrer nofollow ugc" className="link">{m[0]}</a>);
+  for (const m of text.matchAll(URL_RE)) {
+    if (m.index! > last) out.push(<span key={k.n++}>{mention(text.slice(last, m.index))}</span>);
+    out.push(<a key={k.n++} href={m[0]} target="_blank" rel="noopener noreferrer nofollow ugc" className="link">{m[0]}</a>);
     last = m.index! + m[0].length;
   }
-  if (last < text.length) out.push(<span key={k++}>{mention(text.slice(last))}</span>);
+  if (last < text.length) out.push(<span key={k.n++}>{mention(text.slice(last))}</span>);
+  return out;
+}
+// *bold*  _italic_  ~strike~  `code` — the marker must hug the text (no space inside) and sit at a word edge, as in WhatsApp.
+const INLINE = /(^|[\s([{>])(?:`([^`\n]+)`|\*([^\s*](?:[^*\n]*[^\s*])?)\*|_([^\s_](?:[^_\n]*[^\s_])?)_|~([^\s~](?:[^~\n]*[^\s~])?)~)(?=$|[\s)\]}.,;:!?])/gu;
+function inline(text: string, meName: string, k: { n: number }, depth = 0): ReactNode[] {
+  const out: ReactNode[] = []; let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    const start = m.index! + m[1].length;
+    if (start > last) out.push(...plain(text.slice(last, start), meName, k));
+    const [, , code, bold, ital, strike] = m;
+    if (code !== undefined) out.push(<code key={k.n++} className="fmt-code">{code}</code>);
+    else { const inner = depth < 3 ? inline((bold ?? ital ?? strike)!, meName, k, depth + 1) : plain((bold ?? ital ?? strike)!, meName, k); out.push(bold !== undefined ? <strong key={k.n++}>{inner}</strong> : ital !== undefined ? <em key={k.n++}>{inner}</em> : <s key={k.n++}>{inner}</s>); }
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push(...plain(text.slice(last), meName, k));
+  return out;
+}
+/** WhatsApp-style formatting: inline styles, ``` monospace blocks, "- " / "* " bullets, "1. " numbers and "> " quotes. */
+function linkify(text: string, meName: string): ReactNode[] {
+  const k = { n: 0 }; const out: ReactNode[] = [];
+  const fences = text.split(/```/);
+  if (fences.length < 3) return block(text, meName, k);
+  fences.forEach((part, i) => {
+    if (i % 2 === 1 && i < fences.length - 1) out.push(<code key={k.n++} className="fmt-block">{part.replace(/^\n|\n$/g, '')}</code>);
+    else if (part) out.push(...block(i % 2 === 1 ? '```' + part : part, meName, k));
+  });
+  return out;
+}
+function block(text: string, meName: string, k: { n: number }): ReactNode[] {
+  const lines = text.split('\n'); const out: ReactNode[] = []; let i = 0;
+  while (i < lines.length) {
+    const ln = lines[i]; let m: RegExpMatchArray | null;
+    if ((m = ln.match(/^\s*[-*] (.+)/))) { const items: string[] = []; while (i < lines.length && (m = lines[i].match(/^\s*[-*] (.+)/))) { items.push(m[1]); i++; } out.push(<ul key={k.n++} className="fmt-list">{items.map((t) => <li key={k.n++}>{inline(t, meName, k)}</li>)}</ul>); }
+    else if ((m = ln.match(/^\s*\d+\. (.+)/))) { const items: string[] = []; while (i < lines.length && (m = lines[i].match(/^\s*\d+\. (.+)/))) { items.push(m[1]); i++; } out.push(<ol key={k.n++} className="fmt-list">{items.map((t) => <li key={k.n++}>{inline(t, meName, k)}</li>)}</ol>); }
+    else if (/^> ?/.test(ln)) { const qs: string[] = []; while (i < lines.length && /^> ?/.test(lines[i])) { qs.push(lines[i].replace(/^> ?/, '')); i++; } out.push(<blockquote key={k.n++} className="fmt-quote">{inline(qs.join('\n'), meName, k)}</blockquote>); }
+    else { const para: string[] = []; while (i < lines.length && !/^\s*([-*] |\d+\. )\S/.test(lines[i]) && !/^> ?/.test(lines[i])) { para.push(lines[i]); i++; } out.push(<span key={k.n++}>{inline(para.join('\n'), meName, k)}{i < lines.length ? '\n' : ''}</span>); }
+  }
   return out;
 }
 const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|\s){1,6}$/u;
@@ -145,25 +181,38 @@ function EventCard({ m }: { m: Msg }) {
   );
 }
 
-function Body({ m, onOpenMedia }: { m: Msg; onOpenMedia: (m: Msg) => void }) {
+function Body({ m, onOpenMedia, nameOf }: { m: Msg; onOpenMedia: (m: Msg) => void; nameOf: (id: string) => string }) {
   const meName = useStore((s) => s.me!.username);
   const meId = useStore((s) => s.me!.id);
   if (m.deleted) return <span className="deleted"><Icon name="ban" size={15} /> {m.senderId === meId ? 'You deleted this message' : 'This message was deleted'}</span>;
   switch (m.kind) {
-    case 'image': case 'sticker': return <>{m.media ? <MediaImage id={m.media.id} w={m.media.width} h={m.media.height} alt={m.media.name ?? 'Photo'} onOpen={() => onOpenMedia(m)} /> : null}{m.body ? <p className="txt cap">{linkify(m.body, meName)}</p> : null}</>;
-    case 'video': return <>{m.media ? <VideoPlayer id={m.media.id} /> : null}{m.body ? <p className="txt cap">{linkify(m.body, meName)}</p> : null}</>;
+    case 'image': case 'sticker': return <>{m.media ? <MediaImage id={m.media.id} w={m.media.width} h={m.media.height} alt={m.media.name ?? 'Photo'} onOpen={() => onOpenMedia(m)} /> : null}{m.body ? <div className="txt cap">{linkify(m.body, meName)}</div> : null}</>;
+    case 'video': return <>{m.media ? <VideoPlayer id={m.media.id} note={!!m.meta.note} /> : null}{m.body ? <div className="txt cap">{linkify(m.body, meName)}</div> : null}</>;
     case 'voice': return m.media ? <Voice m={m} /> : null;
     case 'audio': return m.media ? <AudioFile id={m.media.id} name={m.media.name} /> : null;
-    case 'document': return <>{m.media ? <DocCard m={m} /> : null}{m.body ? <p className="txt cap">{linkify(m.body, meName)}</p> : null}</>;
+    case 'document': return <>{m.media ? <DocCard m={m} /> : null}{m.body ? <div className="txt cap">{linkify(m.body, meName)}</div> : null}</>;
     case 'location': return <Location m={m} />;
     case 'contact': return <ContactCard m={m} />;
     case 'poll': return <Poll m={m} />;
     case 'event': return <EventCard m={m} />;
-    case 'gif': return <a className="link" href={m.meta.url} target="_blank" rel="noopener noreferrer">GIF · open</a>;
-    default: return <p className={`txt ${EMOJI_ONLY.test(m.body) ? 'big-emoji' : ''}`}>{linkify(m.body, meName)}</p>;
+    case 'gif': return <a className="gif-msg" href={m.meta.url} target="_blank" rel="noopener noreferrer"><img src={m.meta.preview ?? m.meta.url} alt="GIF" loading="lazy" style={{ aspectRatio: m.meta.width && m.meta.height ? `${m.meta.width}/${m.meta.height}` : undefined }} /></a>;
+    default: return <>{m.meta.statusReply ? <StatusReply m={m} nameOf={nameOf} meId={meId} /> : null}<div className={`txt ${EMOJI_ONLY.test(m.body) ? 'big-emoji' : ''}`}>{linkify(m.body, meName)}</div></>;
   }
 }
-function VideoPlayer({ id }: { id: string }) { const m = useMedia(id); return m ? <video className="media-video" src={m.url} controls preload="metadata" playsInline /> : <div className="skel media-video" />; }
+function VideoPlayer({ id, note }: { id: string; note?: boolean }) { const m = useMedia(id); return m ? <video className={`media-video ${note ? 'note' : ''}`} src={m.url} controls preload="metadata" playsInline /> : <div className={`skel media-video ${note ? 'note' : ''}`} />; }
+
+/** The card shown above a reply to someone's status: who, what kind, a snippet and a thumbnail. */
+function StatusReply({ m, nameOf, meId }: { m: Msg; nameOf: (id: string) => string; meId: string }) {
+  const r = m.meta.statusReply as { ownerId: string; kind: string; text: string; mediaId?: string | null };
+  const thumb = useMedia(r.mediaId ?? '');
+  const mine = r.ownerId === meId;
+  return (
+    <div className={`status-quote ${mine ? 'own' : ''}`}>
+      <span className="grow"><b>{mine ? 'You' : nameOf(r.ownerId)} <i>•</i> Status</b><span className="sq-line"><Icon name={r.kind === 'video' ? 'video' : 'image'} size={14} /><span className="truncate">{r.text}</span></span></span>
+      {r.kind !== 'text' ? <span className="sq-thumb">{r.mediaId && thumb ? <img src={thumb.thumbUrl ?? thumb.url} alt="" /> : null}</span> : null}
+    </div>
+  );
+}
 function AudioFile({ id, name }: { id: string; name: string | null }) { const m = useMedia(id); return <div><small className="muted">{name}</small>{m ? <audio controls preload="none" src={m.url} style={{ width: 240, maxWidth: '100%' }} /> : null}</div>; }
 
 export interface BubbleProps {
@@ -188,8 +237,8 @@ export const Bubble = memo(function Bubble(p: BubbleProps) {
     const txt = m.meta.event === 'call' ? systemText(m.meta, p.meId, p.nameOf) : systemText(m.meta, p.meId, p.nameOf);
     return <div className="sys-msg" data-seq={m.seq}><span>{m.meta.event === 'call' ? <Icon name={m.meta.callKind === 'video' ? 'video' : 'phone'} size={14} /> : null}{txt}</span></div>;
   }
-  const bare = (m.kind === 'sticker' || (m.kind === 'text' && EMOJI_ONLY.test(m.body))) && !m.replyTo && !m.deleted;
-  const mediaOnly = (m.kind === 'image' || m.kind === 'video') && !m.body && !m.deleted && !m.replyTo;
+  const bare = (m.kind === 'sticker' || (m.kind === 'text' && EMOJI_ONLY.test(m.body) && !m.meta.statusReply)) && !m.replyTo && !m.deleted;
+  const mediaOnly = (m.kind === 'image' || m.kind === 'video' || m.kind === 'gif') && !m.body && !m.deleted && !m.replyTo;
   return (
     <div className={`msg-row ${mine ? 'out' : 'in'} ${p.first ? 'first' : ''} ${p.highlight ? 'hl' : ''}`} data-id={m.id} data-seq={m.seq}
       onContextMenu={(e) => { e.preventDefault(); p.onMenu(e, m); }}
@@ -205,7 +254,7 @@ export const Bubble = memo(function Bubble(p: BubbleProps) {
           {m.replyTo && !m.deleted ? (
             <button className="quote" onClick={() => p.onReplyJump(m.replyTo!.id)}><b>{m.replyTo.senderId === p.meId ? 'You' : p.nameOf(m.replyTo.senderId ?? '')}</b><span className="truncate">{m.replyTo.deleted ? 'Deleted message' : m.replyTo.kind === 'text' ? m.replyTo.body : `📎 ${m.replyTo.kind}`}</span></button>
           ) : null}
-          <Body m={m} onOpenMedia={p.onOpenMedia} />
+          <Body m={m} onOpenMedia={p.onOpenMedia} nameOf={p.nameOf} />
           <span className="meta">
             {m.pinned ? <Icon name="pin" size={12} /> : null}{m.starred ? <Icon name="star" size={12} fill /> : null}{m.expiresAt ? <Icon name="clock" size={12} /> : null}
             {m.editedAt && !m.deleted ? <span>Edited</span> : null}

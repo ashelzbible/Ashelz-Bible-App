@@ -5,9 +5,11 @@ import { realtime } from '../lib/realtime.ts';
 import { getState, toast, useStore } from '../lib/store.ts';
 import type { Conv, Msg } from '../lib/types.ts';
 import { guard, sendMessage, toastError } from '../lib/actions.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Icon, type IconName } from '../ui/Icon.tsx';
+import { Dialog } from '../ui/Overlay.tsx';
 import { useMenu } from '../ui/Overlay.tsx';
-import { EmojiPicker } from './Emoji.tsx';
+import { EmojiPanel, type GifItem } from './Emoji.tsx';
+import { CameraCapture } from './Camera.tsx';
 import { ContactPicker, EventDialog, PollDialog, ScheduleDialog } from './Dialogs.tsx';
 
 interface Pending { id: string; file: File; kind: 'image' | 'video' | 'document' | 'audio'; preview?: string; progress: number; error?: string; abort?: () => void }
@@ -20,9 +22,9 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
   const [text, setText] = useState(conv.draft ?? '');
   const [emoji, setEmoji] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
-  const [dlg, setDlg] = useState<null | 'poll' | 'event' | 'contact' | 'schedule'>(null);
+  const [dlg, setDlg] = useState<null | 'poll' | 'event' | 'contact' | 'schedule'>(null); const [cam, setCam] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null); const docRef = useRef<HTMLInputElement>(null); const camRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null); const docRef = useRef<HTMLInputElement>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const typingAt = useRef(0); const pauseTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const menu = useMenu();
@@ -68,6 +70,25 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
       } catch (e: any) { setPending((p) => p.map((x) => (x.id === it.id ? { ...x, error: e.message, progress: 0 } : x))); }
     }
     return ok;
+  }
+
+  async function sendSticker(st: { mediaId: string } | { file: File; kind: 'sticker' }) {
+    try {
+      let media: any; let mediaId: string;
+      if ('mediaId' in st) mediaId = st.mediaId;
+      else { const r = await uploadWithProgress(st.file, st.file.name, 'sticker', {}, () => {}).promise; mediaId = r.media.id; media = r.media; }
+      sendMessage(convId, { kind: 'sticker', mediaId, replyToId: reply?.id ?? null, ...(media ? { _media: media } : {}) });
+      setEmoji(false); onClearReply(); onSent();
+    } catch (e) { toastError(e); }
+  }
+
+  async function sendNote(f: File) {
+    try {
+      const up = uploadWithProgress(f, f.name, 'video', {}, () => {});
+      const r = await up.promise;
+      sendMessage(convId, { kind: 'video', meta: { note: true }, mediaId: r.media.id, replyToId: reply?.id ?? null, _media: r.media });
+      onClearReply(); onSent();
+    } catch (e) { toastError(e); }
   }
 
   async function send() {
@@ -141,16 +162,8 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
     navigator.geolocation.getCurrentPosition((p) => sendMessage(convId, { kind: 'location', meta: { lat: p.coords.latitude, lng: p.coords.longitude, label: 'My location' } }), () => toast('Allow location access to share it', 'error'), { enableHighAccuracy: true, timeout: 10000 });
   }
 
-  const attach = (e: React.MouseEvent<HTMLElement>) => menu.open([
-    { label: 'Photos & videos', icon: 'image', onClick: () => fileRef.current?.click() },
-    { label: 'Camera', icon: 'camera', onClick: () => camRef.current?.click() },
-    { label: 'Document', icon: 'doc', onClick: () => docRef.current?.click() },
-    { label: 'Location', icon: 'map-pin', onClick: shareLocation },
-    { label: 'Contact', icon: 'user', onClick: () => setDlg('contact') },
-    { label: 'Poll', icon: 'bar-chart', onClick: () => setDlg('poll') },
-    { label: 'Event', icon: 'calendar', onClick: () => setDlg('event') },
-    { label: 'Schedule message', icon: 'clock', onClick: () => setDlg('schedule') },
-  ], e.currentTarget);
+  const [sheet, setSheet] = useState(false);
+
 
   const can = text.trim().length > 0 || pending.length > 0;
   const uploading = pending.some((p) => p.progress > 0 && p.progress < 1);
@@ -185,20 +198,30 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
           </div>))}
         </div>
       ) : null}
-      {emoji ? <EmojiPicker onPick={(e) => { const el = ta.current; const s = el?.selectionStart ?? text.length, en = el?.selectionEnd ?? text.length; const v = text.slice(0, s) + e + text.slice(en); onType(v); requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(s + e.length, s + e.length); }); }} /> : null}
+      {emoji ? <EmojiPanel onClose={() => setEmoji(false)}
+        onEmoji={(e) => { const el = ta.current; const s = el?.selectionStart ?? text.length, en = el?.selectionEnd ?? text.length; const v = text.slice(0, s) + e + text.slice(en); onType(v); requestAnimationFrame(() => { el?.setSelectionRange(s + e.length, s + e.length); }); }}
+        onBackspace={() => { const el = ta.current; const s = el?.selectionStart ?? text.length, en = el?.selectionEnd ?? text.length; const chars = [...text.slice(0, s)]; const cut = s === en ? chars.slice(0, -1).join('') : text.slice(0, s); onType(cut + text.slice(en)); requestAnimationFrame(() => el?.setSelectionRange(cut.length, cut.length)); }}
+        onGif={(g: GifItem) => { sendMessage(convId, { kind: 'gif', meta: { url: g.url, preview: g.preview, width: g.width, height: g.height }, replyToId: reply?.id ?? null }); setEmoji(false); onClearReply(); onSent(); }}
+        onSticker={(st) => void sendSticker(st)} /> : null}
       <div className="composer">
-        <button className={`icon-btn ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji" aria-pressed={emoji}><Icon name="smile" /></button>
-        <button className="icon-btn" onClick={attach} aria-label="Attach"><Icon name="attach" /></button>
+        <div className="cbox">
+        <button className={`icon-btn ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji" aria-pressed={emoji}><Icon name={emoji ? 'keyboard' : 'smile'} /></button>
         <textarea ref={ta} className="composer-input" rows={1} placeholder={pending.length ? 'Add a caption…' : 'Type a message'} value={text} aria-label="Message"
           onChange={(e) => onType(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (matchMedia('(pointer:fine)').matches || e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } if (e.key === 'Escape') { setEmoji(false); if (editing) onCancelEdit(); else onClearReply(); } if (e.key === 'ArrowUp' && !text) { const mine = [...(getState().msgs[convId]?.list ?? [])].reverse().find((m) => m.senderId === me.id && m.kind === 'text' && !m.deleted && !m.local); if (mine) { e.preventDefault(); document.dispatchEvent(new CustomEvent('wz-edit', { detail: mine })); } } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (matchMedia('(pointer:fine)').matches || e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } if ((e.ctrlKey || e.metaKey) && ['b', 'i', 'u'].includes(e.key.toLowerCase()) && ta.current) { e.preventDefault(); const mk = { b: '*', i: '_', u: '~' }[e.key.toLowerCase() as 'b']; const el = ta.current; const a = el.selectionStart, z = el.selectionEnd; onType(text.slice(0, a) + mk + text.slice(a, z) + mk + text.slice(z)); requestAnimationFrame(() => el.setSelectionRange(a + 1, z + 1)); return; } if (e.key === 'Escape') { setEmoji(false); if (editing) onCancelEdit(); else onClearReply(); } if (e.key === 'ArrowUp' && !text) { const mine = [...(getState().msgs[convId]?.list ?? [])].reverse().find((m) => m.senderId === me.id && m.kind === 'text' && !m.deleted && !m.local); if (mine) { e.preventDefault(); document.dispatchEvent(new CustomEvent('wz-edit', { detail: mine })); } } }}
           onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); addFiles(fs); } }} />
-        {!text.trim() && !pending.length ? <button className="icon-btn hide-sm" onClick={() => camRef.current?.click()} aria-label="Camera"><Icon name="camera" /></button> : null}
+        <button className="icon-btn" onClick={() => setSheet(true)} aria-label="Attach"><Icon name="attach" /></button>
+        {!text.trim() && !pending.length ? <button className="icon-btn" onClick={() => setCam(true)} aria-label="Camera"><Icon name="camera" /></button> : null}
+        </div>
         {can ? <button className="send-btn" onClick={() => void send()} disabled={uploading} aria-label={editing ? 'Save edit' : 'Send'}>{uploading ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : <Icon name={editing ? 'check' : 'send'} size={21} fill={!editing} stroke={editing ? 2.6 : 1.9} />}</button>
           : <button className="send-btn" onClick={startRec} aria-label="Record voice message"><Icon name="mic" size={22} /></button>}
       </div>
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple hidden onChange={(e) => { addFiles([...(e.target.files ?? [])]); e.target.value = ''; }} />
-      <input ref={camRef} type="file" accept="image/*,video/*" capture="environment" hidden onChange={(e) => { addFiles([...(e.target.files ?? [])]); e.target.value = ''; }} />
+      {cam ? <CameraCapture allowNote onClose={() => setCam(false)} onCapture={(f, o) => { setCam(false); if (o?.note) void sendNote(f); else addFiles([f]); }} /> : null}
+      {sheet ? <AttachSheet onClose={() => setSheet(false)} items={[
+        ['Gallery', 'image', '#1E88E5', () => fileRef.current?.click()], ['Camera', 'camera', '#E91E63', () => setCam(true)], ['Location', 'map-pin', '#12A150', () => void shareLocation()], ['Contact', 'user', '#039BE5', () => setDlg('contact')],
+        ['Document', 'doc', '#5E5CE6', () => docRef.current?.click()], ['Poll', 'bar-chart', '#F5A524', () => setDlg('poll')], ['Event', 'calendar', '#E5395B', () => setDlg('event'), 'New'], ['Schedule', 'clock', '#00A884', () => setDlg('schedule')],
+      ]} /> : null}
       <input ref={docRef} type="file" hidden multiple onChange={(e) => { addFiles([...(e.target.files ?? [])]); e.target.value = ''; }} />
       {menu.node}
       {dlg === 'poll' ? <PollDialog convId={convId} onClose={() => setDlg(null)} /> : null}
@@ -206,5 +229,18 @@ export function Composer({ conv, reply, editing, onClearReply, onCancelEdit, onS
       {dlg === 'contact' ? <ContactPicker convId={convId} onClose={() => setDlg(null)} /> : null}
       {dlg === 'schedule' ? <ScheduleDialog convId={convId} initial={text} onClose={() => setDlg(null)} onDone={() => { setText(''); saveDraft(''); }} /> : null}
     </div>
+  );
+}
+
+/** The attachment grid: a row of outlined round tiles, like the phone apps. Browsers cannot list the device gallery, so "Gallery" opens the file picker. */
+function AttachSheet({ items, onClose }: { items: Array<[string, IconName, string, () => void, string?]>; onClose: () => void }) {
+  return (
+    <Dialog title="Attach" onClose={onClose} width={480}>
+      <div className="attach-grid">{items.map(([label, icon, color, fn, badge]) => (
+        <button key={label} className="attach-item" onClick={() => { onClose(); setTimeout(fn, 0); }}>
+          {badge ? <em className="attach-new">{badge}</em> : null}
+          <span className="attach-ico" style={{ color }}><Icon name={icon} size={26} /></span><span>{label}</span>
+        </button>))}</div>
+    </Dialog>
   );
 }

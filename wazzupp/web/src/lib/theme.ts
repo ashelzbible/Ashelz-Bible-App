@@ -1,6 +1,6 @@
 import type { Settings } from './types.ts';
 let mq: MediaQueryList | null = null;
-export function applyAppearance(a: Pick<Settings['appearance'], 'theme' | 'fontSize'> | undefined) {
+export function applyAppearance(a: Partial<Pick<Settings['appearance'], 'theme' | 'fontSize' | 'highContrast' | 'reduceMotion'>> | undefined) {
   const root = document.documentElement;
   const set = () => {
     const t = a?.theme ?? 'system';
@@ -10,6 +10,8 @@ export function applyAppearance(a: Pick<Settings['appearance'], 'theme' | 'fontS
   };
   set();
   root.dataset.font = a?.fontSize ?? 'md';
+  root.dataset.contrast = a?.highContrast ? 'high' : 'normal';
+  root.dataset.motion = a?.reduceMotion ? 'reduced' : 'normal';
   mq?.removeEventListener('change', set);
   mq = window.matchMedia('(prefers-color-scheme: dark)');
   mq.addEventListener('change', set);

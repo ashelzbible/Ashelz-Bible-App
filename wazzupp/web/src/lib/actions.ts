@@ -290,3 +290,12 @@ export async function markCallsSeen() {
   if (!unread) return;
   try { await api.post('/api/notifications/read'); await loadNotifications(); } catch { /* ignore */ }
 }
+
+/** Marks every chat as read (and clears manual "unread" flags). */
+export async function markAllRead() {
+  const list = Object.values(getState().convs).filter((c) => c.unread > 0 || c.markedUnread);
+  if (!list.length) { toast('Everything is already read'); return; }
+  setState((s) => { const convs = { ...s.convs }; for (const c of list) convs[c.id] = { ...convs[c.id], unread: 0, unreadMentions: 0, markedUnread: false, lastReadSeq: c.lastSeq }; return { convs }; });
+  await Promise.allSettled(list.map((c) => api.post(`/api/conversations/${c.id}/read`, { seq: c.lastSeq })));
+  toast(`Marked ${list.length} ${list.length === 1 ? 'chat' : 'chats'} as read`);
+}

@@ -78,3 +78,9 @@ export async function otherWatermarks(db: Db, conversationId: string, me: string
   return r.rows[0].n ? { delivered: Number(r.rows[0].d), read: Number(r.rows[0].r) } : null;
 }
 void q;
+
+/** In channels, subscribers must not learn who the admins are: sender identity is stripped from what they receive. */
+export const isMasked = (c: { kind: string; role: string }) => c.kind === 'channel' && c.role === 'subscriber';
+export function maskMsg<T extends { senderId: string | null; replyTo: { senderId: string | null } | null; mentions: string[] }>(m: T): T {
+  return { ...m, senderId: null, mentions: [], replyTo: m.replyTo ? { ...m.replyTo, senderId: null } : null, senderName: null } as T;
+}

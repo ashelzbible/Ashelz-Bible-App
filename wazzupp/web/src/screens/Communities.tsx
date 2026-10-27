@@ -9,9 +9,10 @@ import { useMedia } from '../lib/mediaCache.ts';
 import { Avatar } from '../ui/Avatar.tsx';
 import { Icon } from '../ui/Icon.tsx';
 import { Empty } from '../ui/Misc.tsx';
-import { Dialog } from '../ui/Overlay.tsx';
+import { Dialog, useMenu } from '../ui/Overlay.tsx';
+import { CommunityArt } from '../ui/Art.tsx';
 import { PaneFrame } from './Frame.tsx';
-import { NewCommunityDialog } from './Dialogs.tsx';
+import { CommunityExamplesDialog, NewCommunityDialog } from './Dialogs.tsx';
 
 const TILE = [['#2BC48A', '#0E8A5F'], ['#FF9A3D', '#F07412'], ['#4DA3F5', '#1E6BD6'], ['#3B64D9', '#1B3FA8'], ['#B24FC4', '#7A2791'], ['#F0556B', '#C02A44']];
 export function Tile({ c, size = 52 }: { c: { id: string; name: string; avatarMediaId: string | null }; size?: number }) {
@@ -22,21 +23,38 @@ void avatarColors;
 
 export function CommunityList() {
   const list = useStore((s) => s.communities); const route = useRoute(); const layout = useLayout();
-  const [q, setQ] = useState(''); const [create, setCreate] = useState(false); const [disc, setDisc] = useState<{ communities: any[]; channels: any[] } | null>(null);
+  const [q, setQ] = useState(''); const [searching, setSearching] = useState(false); const [create, setCreate] = useState(false); const [examples, setExamples] = useState(false);
+  const [disc, setDisc] = useState<{ communities: any[]; channels: any[] } | null>(null);
+  const menu = useMenu();
   useEffect(() => { void loadCommunities(); }, []);
   useEffect(() => { if (q.trim().length < 2) { setDisc(null); return; } const t = setTimeout(() => api.get(`/api/communities/discover?q=${encodeURIComponent(q.trim())}`).then(setDisc).catch(() => {}), 300); return () => clearTimeout(t); }, [q]);
   const shown = list.filter((c) => c.name.toLowerCase().includes(q.toLowerCase()));
-  const search = <div className={layout === 'desktop' ? 'rail-search' : 'm-search'}><Icon name="search" size={18} /><input placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search communities" /></div>;
+  const actions = (<>
+    {list.length ? <button className="icon-btn on-dark" aria-label="Search communities" onClick={() => setSearching((v) => !v)}><Icon name="search" /></button> : null}
+    <button className="icon-btn on-dark" aria-label="More options" onClick={(e) => menu.open([{ label: 'Start a community', icon: 'users', onClick: () => setCreate(true) }, { label: 'Explore communities', icon: 'globe', onClick: () => { setSearching(true); } }, { label: 'Settings', icon: 'settings', onClick: () => go('settings') }], e)}><Icon name="more" /></button></>);
+  const empty = !list.length && !disc && !searching;
   return (
-    <PaneFrame title="Communities" search={search} actions={<button className="icon-btn on-dark" onClick={() => setCreate(true)} aria-label="New community"><Icon name="plus" /></button>}>
+    <PaneFrame title="Communities" plain actions={actions}>
+      {searching ? <div className="m-search call-search"><Icon name="search" size={18} /><input autoFocus placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search communities" /></div> : null}
+      {empty ? (
+        <div className="community-empty">
+          <CommunityArt />
+          <h2>Stay connected with a community</h2>
+          <p>Communities bring members together in topic-based groups, and make it easy to get admin announcements. Any community you’re added to will appear here.</p>
+          <button className="link-btn" onClick={() => setExamples(true)}>See example communities <Icon name="right" size={16} /></button>
+          <button className="btn btn-primary btn-block big" onClick={() => setCreate(true)}>Start your community</button>
+        </div>
+      ) : null}
       {shown.length ? <ul className="conv-list">{shown.map((c) => (
-        <li key={c.id}><button className={`conv-row ${route.tab === 'communities' && route.id === c.id && layout !== 'mobile' ? 'sel' : ''}`} onClick={() => go(`communities/${c.id}`)}><Tile c={c} /><span className="conv-main"><span className="conv-name truncate">{c.name}</span><span className="conv-prev">{c.groups.length} group{c.groups.length === 1 ? '' : 's'}</span></span></button></li>))}</ul>
-        : !disc ? <Empty icon="users" title="No communities yet" text="Communities bring related groups together under one roof with announcements." action={<button className="btn btn-primary" onClick={() => setCreate(true)}><Icon name="plus" size={18} />Create community</button>} /> : null}
+        <li key={c.id}><button className={`conv-row ${route.tab === 'communities' && route.id === c.id && layout !== 'mobile' ? 'sel' : ''}`} onClick={() => go(`communities/${c.id}`)}><Tile c={c} /><span className="conv-main"><span className="conv-name truncate">{c.name}</span><span className="conv-prev">{c.groups.length} group{c.groups.length === 1 ? '' : 's'}</span></span></button></li>))}</ul> : null}
+      {list.length ? <button className="new-community-row" onClick={() => setCreate(true)}><span><Icon name="plus" size={22} /></span>New community</button> : null}
       {disc && (disc.communities.length || disc.channels.length) ? <>
         <h4 className="list-sub">Discover</h4>
         <ul className="conv-list">{disc.communities.map((c) => <li key={c.id}><div className="conv-row"><Tile c={c} /><span className="conv-main"><span className="conv-name truncate">{c.name}</span><span className="conv-prev">{c.members} members</span></span><button className="btn btn-soft btn-sm" onClick={async () => { await guard(api.post(`/api/communities/${c.id}/join`)); await loadCommunities(); await loadConversations(); go(`communities/${c.id}`); }}>Join</button></div></li>)}
           {disc.channels.map((c) => <li key={c.id}><div className="conv-row"><Avatar id={c.id} name={c.title} mediaId={c.avatarMediaId} group size={52} /><span className="conv-main"><span className="conv-name truncate">{c.title}</span><span className="conv-prev">Channel · {c.members}</span></span><button className="btn btn-soft btn-sm" onClick={async () => { const r = await guard(api.post(`/api/channels/${c.id}/subscribe`)); if (r) { await loadConversations(); go(`chats/${c.id}`); } }}>Subscribe</button></div></li>)}</ul></> : null}
+      {menu.node}
       {create ? <NewCommunityDialog onClose={() => setCreate(false)} /> : null}
+      {examples ? <CommunityExamplesDialog onClose={() => setExamples(false)} onStart={() => setCreate(true)} /> : null}
     </PaneFrame>
   );
 }

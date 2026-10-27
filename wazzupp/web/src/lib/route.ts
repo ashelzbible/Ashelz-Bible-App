@@ -18,8 +18,8 @@ export const back = () => backHash();
 
 export type Layout = 'mobile' | 'tablet' | 'desktop';
 const q = (px: number) => window.matchMedia(`(min-width: ${px}px)`);
-const layoutSub = (cb: () => void) => { const a = q(700), b = q(1280); a.addEventListener('change', cb); b.addEventListener('change', cb); return () => { a.removeEventListener('change', cb); b.removeEventListener('change', cb); }; };
-const layoutSnap = (): Layout => (q(1280).matches ? 'desktop' : q(700).matches ? 'tablet' : 'mobile');
+const layoutSub = (cb: () => void) => { const a = q(700); a.addEventListener('change', cb); return () => a.removeEventListener('change', cb); };
+const layoutSnap = (): Layout => (q(700).matches ? 'desktop' : 'mobile'); // tablets and computers share one layout: rail + chat list + conversation
 export const useLayout = (): Layout => useSyncExternalStore(layoutSub, layoutSnap, () => 'desktop');
 const wideSub = (cb: () => void) => { const m = q(1360); m.addEventListener('change', cb); return () => m.removeEventListener('change', cb); };
 export const useWide = (): boolean => useSyncExternalStore(wideSub, () => q(1360).matches, () => true);

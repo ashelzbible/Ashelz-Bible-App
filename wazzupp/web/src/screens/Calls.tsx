@@ -1,42 +1,76 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { duration, listTime, clock } from '../lib/format.ts';
+import { duration, clock } from '../lib/format.ts';
 import { go, useLayout, useRoute } from '../lib/route.ts';
-import { useStore } from '../lib/store.ts';
+import { toast, useStore } from '../lib/store.ts';
+import { api } from '../lib/api.ts';
 import type { CallHistory } from '../lib/types.ts';
 import { acceptCall, declineCall, getCallMedia, hangUp, setMicrophone, setSpeaker, startCall, subscribeCallMedia, switchCamera, toggleCamera, toggleMute, toggleScreenShare } from '../lib/rtc.ts';
 import { Avatar } from '../ui/Avatar.tsx';
 import { Icon } from '../ui/Icon.tsx';
 import { Empty } from '../ui/Misc.tsx';
-import { useMenu } from '../ui/Overlay.tsx';
+import { Confirm, useMenu } from '../ui/Overlay.tsx';
+import { FavouritesDialog, KeypadDialog, NewCallDialog, ScheduleCallDialog, ScheduledCallsDialog } from './CallDialogs.tsx';
 import { PaneFrame } from './Frame.tsx';
-import { markCallsSeen } from '../lib/actions.ts';
-import { openDirect } from '../lib/actions.ts';
+import { markCallsSeen, openDirect, loadCalls } from '../lib/actions.ts';
 
-type F = 'all' | 'missed' | 'incoming' | 'outgoing';
 const stateLabel = (c: CallHistory) => c.state === 'missed' ? (c.direction === 'incoming' ? 'Missed' : 'No answer') : c.state === 'declined' ? 'Declined' : c.state === 'cancelled' ? 'Cancelled' : c.state === 'failed' ? 'Failed' : c.direction === 'incoming' ? 'Incoming' : 'Outgoing';
+const callDate = (iso: string) => {
+  const d = new Date(iso), now = new Date(); const y = new Date(now); y.setDate(now.getDate() - 1);
+  const t = clock(iso);
+  if (d.toDateString() === now.toDateString()) return `Today, ${t}`;
+  if (d.toDateString() === y.toDateString()) return `Yesterday, ${t}`;
+  return `${d.getDate()} ${d.toLocaleDateString(undefined, { month: 'long' })}, ${t}`;
+};
 
 export function CallsList() {
   const calls = useStore((s) => s.calls); const route = useRoute(); const layout = useLayout();
-  const [f, setF] = useState<F>('all');
+  const [q, setQ] = useState(''); const [searching, setSearching] = useState(false);
+  const [dlg, setDlg] = useState<null | 'call' | 'schedule' | 'keypad' | 'fav' | 'scheduled' | 'clear'>(null);
+  const menu = useMenu();
   useEffect(() => { void markCallsSeen(); }, []);
-  const list = calls.filter((c) => f === 'all' || (f === 'missed' ? c.state === 'missed' && c.direction === 'incoming' : f === c.direction));
+  const list = calls.filter((c) => !q || c.other.displayName.toLowerCase().includes(q.toLowerCase()) || c.other.username.toLowerCase().includes(q.toLowerCase()));
   const call = async (c: CallHistory) => { const id = await openDirect(c.other.id); void startCall(id, c.kind); };
-  const filters = (['all', 'missed', 'incoming', 'outgoing'] as F[]).map((x) => <button key={x} className="chip" aria-pressed={f === x} onClick={() => setF(x)}>{x[0].toUpperCase() + x.slice(1)}</button>);
+  const actions = (<>
+    <button className="icon-btn on-dark" aria-label="Search calls" onClick={() => setSearching((v) => !v)}><Icon name="search" /></button>
+    <button className="icon-btn on-dark" aria-label="More options" onClick={(e) => menu.open([
+      { label: 'Clear call log', icon: 'trash', onClick: () => setDlg('clear') },
+      { label: 'Scheduled calls', icon: 'cal-clock', onClick: () => setDlg('scheduled') },
+      { label: 'Settings', icon: 'settings', onClick: () => go('settings') },
+    ], e)}><Icon name="more" /></button></>);
+  const circles = [
+    { id: 'call', label: 'Call', icon: 'phone' as const }, { id: 'schedule', label: 'Schedule', icon: 'cal-grid' as const },
+    { id: 'keypad', label: 'Keypad', icon: 'keypad' as const }, { id: 'fav', label: 'Favourites', icon: 'heart' as const },
+  ];
   return (
-    <PaneFrame title="Calls" filters={filters}>
-      {list.length ? <ul className="conv-list">{list.map((c) => {
+    <PaneFrame title="Calls" plain actions={actions}
+      overlay={layout !== 'desktop' ? <button className="fab" onClick={() => setDlg('call')} aria-label="New call"><span className="fab-ico"><Icon name="phone" size={26} /><i>+</i></span></button> : undefined}>
+      {searching ? <div className="m-search call-search"><Icon name="search" size={18} /><input autoFocus placeholder="Search name" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search call log" /></div> : null}
+      <div className="action-circles">{circles.map((c) => <button key={c.id} onClick={() => setDlg(c.id as any)}><span><Icon name={c.icon} size={26} /></span>{c.label}</button>)}</div>
+      <h2 className="section-h">Recent</h2>
+      {list.length ? <ul className="conv-list calls">{list.map((c) => {
         const missed = c.state === 'missed' && c.direction === 'incoming';
+        const bad = missed || (c.direction === 'incoming' && ['declined', 'failed'].includes(c.state));
         return (
           <li key={c.id}><div className={`conv-row call-row ${route.tab === 'calls' && route.id === c.id && layout !== 'mobile' ? 'sel' : ''}`}>
             <button className="call-open" onClick={() => go(`calls/${c.id}`)}>
-              <Avatar id={c.other.id} name={c.other.displayName} mediaId={c.other.avatarMediaId} size={layout === 'mobile' ? 52 : 46} />
-              <span className="conv-main"><span className="conv-line"><span className={`conv-name truncate ${missed ? 'missed' : ''}`}>{c.other.displayName}</span></span>
-                <span className="conv-prev"><Icon name={missed ? 'phone-missed' : c.direction === 'incoming' ? 'phone-in' : 'phone-out'} size={15} className={`inl ${missed ? 'red' : 'green'}`} /><span className={missed ? 'red' : ''}>{stateLabel(c)}</span><span> · {listTime(c.createdAt) === clock(c.createdAt) ? clock(c.createdAt) : listTime(c.createdAt)}{c.durationSec ? ` · ${duration(c.durationSec)}` : ''}</span></span></span>
+              <Avatar id={c.other.id} name={c.other.displayName} mediaId={c.other.avatarMediaId} size={52} />
+              <span className="conv-main">
+                <span className={`conv-name truncate ${bad ? 'missed' : ''}`}>{c.other.displayName}</span>
+                <span className="call-sub">~ {c.other.username}</span>
+                <span className="call-meta"><Icon name={c.direction === 'incoming' ? 'arrow-in' : 'arrow-out'} size={18} stroke={2.4} className={bad ? 'red' : 'green'} /><span>{callDate(c.createdAt)}{c.durationSec ? ` · ${duration(c.durationSec)}` : ''}</span></span>
+              </span>
             </button>
-            <button className="call-btn" onClick={() => call(c)} aria-label={`${c.kind === 'video' ? 'Video' : 'Voice'} call ${c.other.displayName}`}><Icon name={c.kind === 'video' ? 'video' : 'phone'} size={20} /></button>
+            <button className="call-btn plain" onClick={() => call(c)} aria-label={`${c.kind === 'video' ? 'Video' : 'Voice'} call ${c.other.displayName}`}><Icon name={c.kind === 'video' ? 'video' : 'phone'} size={26} /></button>
           </div></li>);
-      })}</ul> : <Empty icon="phone" title="No calls yet" text="Your voice and video call history will appear here." />}
+      })}</ul> : <Empty icon="phone" title={q ? 'No calls found' : 'No recent calls'} text={q ? 'Try another name.' : 'Tap Call to start a voice or video call.'} />}
+      {menu.node}
+      {dlg === 'call' ? <NewCallDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'schedule' ? <ScheduleCallDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'keypad' ? <KeypadDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'fav' ? <FavouritesDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'scheduled' ? <ScheduledCallsDialog onClose={() => setDlg(null)} /> : null}
+      {dlg === 'clear' ? <Confirm title="Clear call log?" text="Finished calls are removed from your log. The other person's log is not affected." confirm="Clear" danger onConfirm={async () => { await api.del('/api/calls'); await loadCalls(); toast('Call log cleared'); }} onClose={() => setDlg(null)} /> : null}
     </PaneFrame>
   );
 }

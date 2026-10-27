@@ -47,7 +47,7 @@ function classify(kind: string, mime: string, name: string): string | null {
 
 export async function removeMediaIfUnreferenced(mediaId: string) {
   const ref = await one(`select (select count(*) from messages where media_id = $1 and deleted_for_all_at is null)::int
-      + (select count(*) from status_updates where media_id = $1)::int + (select count(*) from user_profiles where avatar_media_id = $1)::int
+      + (select count(*) from status_updates where media_id = $1 or audio_media_id = $1)::int + (select count(*) from music_tracks where media_id = $1)::int + (select count(*) from user_profiles where avatar_media_id = $1)::int
       + (select count(*) from conversations where avatar_media_id = $1)::int n`, [mediaId]);
   if (ref.n > 0) return;
   const a = await one(`update media_assets set deleted_at = now() where id = $1 and deleted_at is null returning storage_key, thumb_key`, [mediaId]);
@@ -60,7 +60,7 @@ export async function canAccessMedia(mediaId: string, userId: string): Promise<b
     `select exists(select 1 from media_assets a where a.id = $1 and a.owner_id = $2)
          or exists(select 1 from messages m join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = $2 and cm.left_at is null and not cm.removed
                     where m.media_id = $1 and m.deleted_for_all_at is null and m.seq > cm.first_visible_seq and (not m.undelivered or m.sender_id = $2))
-         or exists(select 1 from status_updates s where s.media_id = $1 and s.expires_at > now() and (s.user_id = $2 or (
+         or exists(select 1 from status_updates s where (s.media_id = $1 or s.audio_media_id = $1) and s.expires_at > now() and (s.user_id = $2 or (
               not exists(select 1 from blocks b where b.blocker_id = s.user_id and b.blocked_id = $2) and (
                 (s.audience = 'contacts' and exists(select 1 from contacts c where c.owner_id = s.user_id and c.contact_id = $2))
              or (s.audience = 'except' and exists(select 1 from contacts c where c.owner_id = s.user_id and c.contact_id = $2) and $2 <> all(s.audience_ids))

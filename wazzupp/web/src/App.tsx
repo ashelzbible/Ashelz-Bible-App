@@ -5,7 +5,7 @@ import { useStore } from './lib/store.ts';
 import { go, useLayout, useRoute } from './lib/route.ts';
 import { applyAppearance } from './lib/theme.ts';
 import { AuthScreen, VerifyGate } from './screens/Auth.tsx';
-import { BrandBar, ConnBanner, Rail } from './screens/Frame.tsx';
+import { ConnBanner, Rail } from './screens/Frame.tsx';
 import { ChatList } from './screens/ChatList.tsx';
 import { Conversation } from './screens/Conversation.tsx';
 import { CallDetail, CallOverlay, CallsList } from './screens/Calls.tsx';
@@ -32,8 +32,7 @@ function Main() {
   const desktop = layout === 'desktop';
   const hasDetail = !!route.id && route.tab !== 'admin';
   const jump = route.sub === 'm' ? Number(route.rest) : undefined;
-  const infoOnly = route.sub === 'info';
-
+  
   const left = route.tab === 'chats' ? <ChatList /> : route.tab === 'calls' ? <CallsList /> : route.tab === 'communities' ? <CommunityList /> : route.tab === 'status' ? <StatusList /> : route.tab === 'settings' ? <SettingsMenu /> : <ChatList />;
   const main = route.tab === 'chats' ? (route.id === 'join' ? <JoinHandler code={route.sub ?? ''} /> : route.id ? <Conversation key={route.id} id={route.id} jumpSeq={jump} /> : <Welcome />)
     : route.tab === 'calls' ? <CallDetail id={route.id} />
@@ -49,19 +48,26 @@ function Main() {
     const showMain = hasDetail && !(route.tab === 'status' && route.id === 'new');
     return <div className="app mobile"><ConnBanner />{showMain ? <div className="mobile-main">{main}</div> : left}</div>;
   }
-  if (layout === 'tablet') {
-    return <div className="app tablet"><ConnBanner /><div className="left-pane">{left}</div><main className="main-pane">{main}</main></div>;
-  }
   return (
-    <div className={`app desktop tab-${route.tab} ${infoOnly ? '' : ''}`}>
-      <div className="left-dark"><BrandBar /><Rail /><section className="left-col">{left}</section></div>
+    <div className={`app desktop tab-${route.tab}`}>
+      <Rail /><section className="left-col"><ConnBanner />{left}</section>
       <main className="main-pane">{main}</main>
     </div>
   );
 }
 
 function Welcome({ text }: { text?: string }) {
-  return <div className="welcome"><Logo size={120} /><h2>Wazzupp for the web</h2><p>{text ?? 'Select a chat to start messaging. Your conversations stay in sync across all your devices.'}</p><span className="muted"><Icon name="shield" size={14} /> Connect. Communicate. Collaborate.</span></div>;
+  const keep = useStore((s) => s.me?.settings);
+  void keep;
+  return (
+    <div className="welcome">
+      <div className="welcome-art" aria-hidden="true"><div className="laptop"><div className="laptop-screen"><Logo size={92} /></div><div className="laptop-base" /></div></div>
+      <h2>Wazzupp Web</h2>
+      <p>{text ?? 'Send and receive messages from any browser, with your chats, calls and updates kept in sync across all your devices.'}</p>
+      <hr />
+      <span className="welcome-note"><Icon name="shield" size={14} /> Connect. Communicate. Collaborate.</span>
+    </div>
+  );
 }
 
 export function App() {

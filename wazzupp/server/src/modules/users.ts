@@ -218,6 +218,15 @@ export async function userRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // ---- feedback ----
+  app.post('/api/feedback', { preHandler: authenticate }, async (req, reply) => {
+    const b = parse(z.object({ kind: z.enum(['feedback', 'bug', 'idea']).default('feedback'), message: z.string().trim().min(5).max(4000), appVersion: z.string().max(40).optional() }), req.body);
+    await rateLimit(`feedback:${req.auth.userId}`, 10, 3600);
+    await q(`insert into feedback(user_id, kind, message, app_version) values ($1,$2,$3,$4)`, [req.auth.userId, b.kind, b.message, b.appVersion ?? null]);
+    reply.code(201);
+    return { ok: true };
+  });
+
   // ---- data export & deletion ----
   app.get('/api/me/export', { preHandler: authenticate }, async (req, reply) => {
     await rateLimit(`export:${req.auth.userId}`, 3, 3600);
