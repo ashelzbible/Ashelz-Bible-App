@@ -13,6 +13,8 @@ services:
         fromDatabase: { name: wazzupp-db, property: connectionString }
       - key: URL_SIGNING_SECRET
         generateValue: true
+      - key: RELAXED_PASSWORDS
+        value: "true"   # testing only: accepts any password of 4+ characters. Remove before real users sign up.
       - key: REQUIRE_VERIFICATION
         value: "false"   # no email service is configured yet, so skip the emailed code
 databases:

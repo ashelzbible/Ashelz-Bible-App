@@ -74,10 +74,10 @@ export function AuthScreen() {
         </>}
         {mode === 'register' && <>
           <Field label="Your name"><input className="input" autoComplete="name" autoFocus value={f.displayName} onChange={set('displayName')} required /></Field>
-          <Field label="Username"><input className="input" autoComplete="username" value={f.username} onChange={set('username')} placeholder="letters, numbers, . or _" required /></Field>
+          <Field label="Username"><input className="input" autoComplete="off" autoCapitalize="none" value={f.username} onChange={set('username')} placeholder="letters, numbers, . or _" required /></Field>
           <Field label="Email"><input className="input" type="email" autoComplete="email" value={f.email} onChange={set('email')} /></Field>
           <Field label="Phone (optional, international format)"><input className="input" type="tel" autoComplete="tel" value={f.phone} onChange={set('phone')} placeholder="+27821234567" /></Field>
-          <Field label="Password"><input className="input" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} placeholder="At least 10 characters" required /></Field>
+          <Field label="Password"><input className="input" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} placeholder="Choose a password" required /></Field>
         </>}
         {mode === 'forgot' && <Field label="Email"><input className="input" type="email" autoFocus autoComplete="email" value={f.email} onChange={set('email')} required /></Field>}
         {mode === 'reset' && <>

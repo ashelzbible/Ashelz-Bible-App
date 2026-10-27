@@ -12,7 +12,7 @@ import { audit } from '../lib/audit.ts';
 import { loadSelf } from '../lib/users.ts';
 import { hub } from '../lib/hub.ts';
 
-const password = z.string().min(10, 'at least 10 characters').max(200);
+const password = z.string().min(config.relaxedPasswords ? 4 : 10, `at least ${config.relaxedPasswords ? 4 : 10} characters`).max(200);
 const username = z.string().regex(/^[a-zA-Z0-9_.]{3,32}$/, '3-32 letters, digits, dot or underscore');
 const email = z.string().email().max(254).transform((s) => s.toLowerCase());
 const phone = z.string().regex(/^\+[1-9]\d{6,14}$/, 'use international format, e.g. +14155550123');
@@ -87,7 +87,7 @@ export async function authRoutes(app: FastifyInstance) {
     await rateLimit(`reg:${clientIp(req)}`, 10, 3600);
     const open = await one(`select enabled from feature_flags where key = 'registration_open'`);
     if (open && !open.enabled) throw forbidden('registration_closed');
-    if (COMMON.has(body.password.toLowerCase()) || body.password.toLowerCase().includes(body.username.toLowerCase())) throw badRequest('weak_password', 'Choose a less guessable password');
+    if (!config.relaxedPasswords && (COMMON.has(body.password.toLowerCase()) || body.password.toLowerCase().includes(body.username.toLowerCase()))) throw badRequest('weak_password', 'Choose a less guessable password');
 
     const hash = await hashPassword(body.password);
     let userId: string;
