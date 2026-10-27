@@ -186,3 +186,26 @@ describe('licensed music catalogue', () => {
     assert.equal((await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: '/music/not-a-song.mp3' })).status, 400);
   });
 });
+
+describe('music library syncs across devices', () => {
+  it('announces every add, edit and delete to the person\'s other devices, and keeps libraries private', async () => {
+    const a = await newUser(ctx, 'sync_a'); const other = await newUser(ctx, 'sync_b');
+    const phone = await Socket.connect(ctx, a.token);
+    const wav = Buffer.alloc(44 + 800); wav.write('RIFF', 0); wav.writeUInt32LE(836, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(800, 40);
+    // bulk: several songs in a row
+    const ids: string[] = [];
+    for (const n of ['One', 'Two', 'Three']) {
+      const up = await a.upload(wav, `${n}.wav`, 'audio'); assert.equal(up.status, 201);
+      const ev = phone.event('music.changed');
+      const r = await a.post('/api/music', { mediaId: up.body.media.id, title: n }); assert.equal(r.status, 201); ids.push(r.body.id);
+      await ev;
+    }
+    assert.equal((await a.get('/api/music')).body.tracks.length, 3);
+    const e2 = phone.event('music.changed'); await a.patch(`/api/music/${ids[0]}`, { mood: 'Happy' }); await e2;
+    const e3 = phone.event('music.changed'); await a.del(`/api/music/${ids[1]}`); await e3;
+    assert.equal((await a.get('/api/music')).body.tracks.length, 2);
+    assert.equal((await other.get('/api/music')).body.tracks.length, 0);
+    assert.equal((await other.del(`/api/music/${ids[0]}`)).status, 404);
+    phone.close();
+  });
+});

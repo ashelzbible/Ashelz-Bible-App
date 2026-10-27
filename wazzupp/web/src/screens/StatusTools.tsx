@@ -6,6 +6,7 @@ import { toast } from '../lib/store.ts';
 import { toastError } from '../lib/actions.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { EmojiTab } from './Emoji.tsx';
+import { MUSIC_CHANGED, addSongs } from '../lib/music.ts';
 
 /* ---------------- overlays (text, emoji, shapes, chips, photos) ---------------- */
 export type ShapeName = 'arrow' | 'circle' | 'square' | 'cloud' | 'bubble' | 'rect' | 'clock';
@@ -138,6 +139,7 @@ export function MusicSheet({ onClose, onPick, onPickCatalog }: { onClose: () => 
   const loadCat = () => { setCatErr(''); return api.get(`/api/music/catalog?q=${encodeURIComponent(q.trim())}`).then(setCat).catch((e) => { setCatErr(e?.message || 'The music catalogue could not be reached. Check your connection.'); setCat({ configured: true, results: [] }); }); };
   useEffect(() => { const t = setTimeout(() => { if (tab === 'catalog') void loadCat(); else void load(); }, q ? 300 : 0); return () => clearTimeout(t); }, [tab, q]);  // eslint-disable-line
   useEffect(() => { if (cat && !cat.configured && tab === 'catalog') setTab('suggested'); }, [cat, tab]);
+  useEffect(() => { const h = () => { if (tab !== 'catalog') void load(); }; window.addEventListener(MUSIC_CHANGED, h); return () => window.removeEventListener(MUSIC_CHANGED, h); }, [tab, q]);  // eslint-disable-line
   const star = async (t: Track) => { await api.patch(`/api/music/${t.id}`, { starred: !t.starred }).catch(toastError); void load(); };
   const del = async (t: Track) => { await api.del(`/api/music/${t.id}`).catch(toastError); void load(); };
   const ph = { catalog: 'Search music…', suggested: 'Search your songs', mood: 'Search your songs', genre: 'Search your songs', starred: 'Search songs' }[tab]; // the placeholders the phone app uses per tab
@@ -162,7 +164,7 @@ export function MusicSheet({ onClose, onPick, onPickCatalog }: { onClose: () => 
           : <>{groups(tab === 'mood' ? data.moods : data.genres, tab).map((g) => <section key={g.k}><div className="mus-sec"><h3>{g.k}</h3><button className="btn btn-soft btn-sm" onClick={() => setQ(g.k)}>See all</button></div>{g.items.slice(0, 3).map(row)}</section>)}{other(tab).length ? <section><div className="mus-sec"><h3>Other</h3></div>{other(tab).map(row)}</section> : null}</>}
         </div>
         <audio ref={audio} onEnded={() => setPlaying(null)} />
-        <input ref={file} type="file" hidden accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,audio/x-m4a" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setAdding(f); }} />
+        <input ref={file} type="file" multiple hidden accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,audio/x-m4a" onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; if (fs.length === 1) setAdding(fs[0]); else if (fs.length) { toast(`Adding ${fs.length} songs…`); void addSongs(fs, () => {}).then((n) => { toast(n === fs.length ? `${n} songs added` : `${n} of ${fs.length} songs added`); void load(); }); } }} />
         {adding ? <AddSong file={adding} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => setAdding(null)} onDone={() => { setAdding(null); void load(); }} /> : null}
       </div>
     </div>

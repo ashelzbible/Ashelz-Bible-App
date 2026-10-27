@@ -249,6 +249,21 @@ describe('browser end to end', () => {
     await a.page.getByLabel('Change font').click(); await a.page.getByLabel('Post status').click(); await a.page.getByText('Status posted').waitFor();
   });
 
+  it('adds several songs at once in Settings → My music and they sync to a second device', async () => {
+    const wav = Buffer.alloc(44 + 8000); wav.write('RIFF', 0); wav.writeUInt32LE(8036, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(8000, 40);
+    const second = await ctxFor('a2');
+    await second.page.goto(BASE); await second.page.getByLabel('Email or username').fill('e2e_alice'); await second.page.getByLabel('Password').fill(PW); await second.page.getByRole('button', { name: 'Sign in' }).click();
+    await second.page.locator('.app').waitFor(); await second.page.evaluate(() => { location.hash = '#/settings/music'; });
+    await a.page.evaluate(() => { location.hash = '#/settings/music'; });
+    await a.page.locator('input[type=file]').first().setInputFiles(['Adele - Easy.wav', 'Burna Boy - Last.wav', 'Solo.wav'].map((name) => ({ name, mimeType: 'audio/wav', buffer: wav })));
+    await a.page.getByText('3 songs added').waitFor({ timeout: 20000 });
+    await a.page.getByText('Easy', { exact: true }).waitFor(); await a.page.getByText('Adele').first().waitFor();
+    await second.page.getByText('Last', { exact: true }).waitFor({ timeout: 10000 }); // appeared on the other device without a refresh
+    await a.page.getByLabel('Delete Solo').click();
+    await second.page.getByText('Solo', { exact: true }).waitFor({ state: 'detached', timeout: 10000 });
+    await second.ctx.close();
+  });
+
   it('has no horizontal overflow or clipped layout at phone, tablet and desktop sizes', async () => {
     for (const [w, h] of [[360, 740], [390, 844], [768, 1024], [820, 1180], [1180, 820], [1440, 900], [1920, 1080]]) {
       await a.page.setViewportSize({ width: w, height: h });

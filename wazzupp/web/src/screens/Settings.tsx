@@ -10,7 +10,7 @@ import { Avatar } from '../ui/Avatar.tsx';
 import { Icon, type IconName } from '../ui/Icon.tsx';
 import { Confirm, Dialog } from '../ui/Overlay.tsx';
 import { Row, Section, Toggle } from '../ui/Misc.tsx';
-import { AccessibilityPage, ChatsPage, EventsPage, HelpFeedbackPage, LanguagePage, StarredPage, StatusPrivacyPage } from './SettingsHome.tsx';
+import { AccessibilityPage, ChatsPage, EventsPage, HelpFeedbackPage, LanguagePage, MyMusicPage, StarredPage, StatusPrivacyPage } from './SettingsHome.tsx';
 import { uploadWithProgress } from '../lib/api.ts';
 
 export async function saveSettings(patch: Record<string, any>) {
@@ -52,6 +52,7 @@ export function SettingsPage({ section }: { section?: string }) {
     case 'starred': return <StarredPage />;
     case 'status-privacy': return <StatusPrivacyPage />;
     case 'events': return <EventsPage />;
+    case 'music': return <MyMusicPage />;
     case 'chats': return <ChatsPage />;
     case 'accessibility': return <AccessibilityPage />;
     case 'language': return <LanguagePage />;

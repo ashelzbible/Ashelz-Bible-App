@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { api } from '../lib/api.ts';
 import { APP_VERSION } from '../lib/version.ts';
@@ -14,6 +14,9 @@ import { Row, Section, Toggle } from '../ui/Misc.tsx';
 import { PaneFrame } from './Frame.tsx';
 import { BroadcastDialog } from './Dialogs.tsx';
 import { saveSettings } from './Settings.tsx';
+import { MUSIC_CHANGED, addSongs, type UploadItem } from '../lib/music.ts';
+import { useMedia } from '../lib/mediaCache.ts';
+import type { Track } from './StatusTools.tsx';
 
 export const profileLink = (username: string) => `${location.origin}/#/chats/u/${username}`;
 
@@ -21,7 +24,7 @@ export const profileLink = (username: string) => `${location.origin}/#/chats/u/$
 const ITEMS: Array<[string, string, IconName, string, boolean?]> = [
   ['devices', 'Linked devices', 'laptop', 'Phones, tablets and computers'], ['account', 'Account', 'key', 'Security, password, delete account'], ['privacy', 'Privacy', 'lock', 'Who can see your info, receipts, blocked contacts'],
   ['folders', 'Lists', 'folder', 'Organise your chats into folders'], ['chats', 'Chats', 'chat', 'Archive, clear, export'], ['appearance', 'Appearance', 'palette', 'Theme, text size, wallpaper'],
-  ['broadcasts', 'Broadcasts', 'megaphone', 'Send one message to many people'], ['events', 'Events', 'calendar', 'Plans shared in your chats', true], ['notifications', 'Notifications', 'bell', 'Messages, calls, quiet hours'],
+  ['music', 'My music', 'music', 'Add songs for your status updates'], ['broadcasts', 'Broadcasts', 'megaphone', 'Send one message to many people'], ['events', 'Events', 'calendar', 'Plans shared in your chats', true], ['notifications', 'Notifications', 'bell', 'Messages, calls, quiet hours'],
   ['storage', 'Storage and data', 'disk', 'Usage and media auto-download'], ['accessibility', 'Accessibility', 'eye', 'Contrast and motion'], ['language', 'App language', 'translate', 'English'],
   ['help', 'Help and feedback', 'help', 'FAQs, contact us, report a problem'], ['invite', 'Invite a friend', 'user-plus', 'Share your profile link'], ['updates', 'App updates', 'refresh', `Version ${APP_VERSION}`],
 ];
@@ -205,4 +208,76 @@ export function HelpFeedbackPage() {
       <button className="btn btn-primary" disabled={busy || text.trim().length < 5} onClick={async () => { setBusy(true); try { await api.post('/api/feedback', { kind, message: text.trim(), appVersion: APP_VERSION }); setText(''); toast('Thanks, we received your message'); } catch (e) { toastError(e); } finally { setBusy(false); } }}>Send</button></div></Section>
     <Section><Row icon="doc" title="Terms and privacy policy" onClick={() => go('settings/legal')} /></Section>
   </div></Page>;
+}
+
+/* ---------- My music: add songs in bulk, edit, star, delete. Lives on the server, so it syncs to every device. ---------- */
+export function MyMusicPage() {
+  const [data, setData] = useState<{ tracks: Track[]; moods: string[]; genres: string[] } | null>(null);
+  const [q, setQ] = useState(''); const [sel, setSel] = useState<Set<string> | null>(null); const [queue, setQueue] = useState<UploadItem[]>([]);
+  const [edit, setEdit] = useState<Track | null>(null); const [bulk, setBulk] = useState(false); const [over, setOver] = useState(false);
+  const [playing, setPlaying] = useState<string | null>(null); const audio = useRef<HTMLAudioElement>(null); const pick = useRef<HTMLInputElement>(null);
+  const load = useCallback(() => api.get(`/api/music?tab=suggested&q=${encodeURIComponent(q.trim())}`).then(setData).catch(toastError), [q]);
+  useEffect(() => { const t = setTimeout(() => void load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
+  useEffect(() => { window.addEventListener(MUSIC_CHANGED, load); return () => window.removeEventListener(MUSIC_CHANGED, load); }, [load]); // another device changed the library
+  const upload = async (files: File[]) => {
+    const audioFiles = files.filter((f) => f.type.startsWith('audio/') || /\.(mp3|m4a|aac|ogg|wav|flac|webm)$/i.test(f.name));
+    if (!audioFiles.length) { toast('Choose audio files (MP3, M4A, WAV, OGG…)', 'error'); return; }
+    if (audioFiles.length < files.length) toast(`${files.length - audioFiles.length} file(s) skipped: not audio`);
+    const n = await addSongs(audioFiles, setQueue); toast(n === audioFiles.length ? `${n} song${n === 1 ? '' : 's'} added` : `${n} of ${audioFiles.length} added`, n ? undefined : 'error'); void load();
+  };
+  const tracks = data?.tracks ?? [];
+  const toggle = (id: string) => setSel((s) => { const n = new Set(s ?? []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const removeSel = async () => { const ids = [...(sel ?? [])]; await Promise.all(ids.map((id) => api.del(`/api/music/${id}`).catch(() => {}))); setSel(null); void load(); toast(`${ids.length} removed`); };
+  return (
+    <Page title="My music" actions={tracks.length ? <button className="btn btn-ghost btn-sm" onClick={() => setSel(sel ? null : new Set())}>{sel ? 'Done' : 'Select'}</button> : undefined}>
+      <div className="form-narrow" onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); void upload([...e.dataTransfer.files]); }}>
+        <div className={`drop-zone ${over ? 'over' : ''}`}>
+          <Icon name="music" size={30} /><b>Add songs to use in your status updates</b>
+          <p className="muted">Pick as many files as you like, or drop them here. They sync automatically to all your devices. Only add music you have the right to share.</p>
+          <button className="btn btn-primary" onClick={() => pick.current?.click()}><Icon name="plus" size={18} />Add songs</button>
+          <input ref={pick} type="file" multiple hidden accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; if (fs.length) void upload(fs); }} />
+        </div>
+        {queue.length ? <Section title={`Uploading ${queue.filter((i) => i.state === 'done').length} of ${queue.length}`}>{queue.map((i) => (
+          <Row key={i.id} icon={i.state === 'done' ? 'check' : i.state === 'failed' ? 'info' : 'music'} title={<span className="truncate" style={{ display: 'block' }}>{i.name}</span>} sub={i.state === 'failed' ? i.error : i.state === 'done' ? 'Added' : i.state === 'uploading' ? `${Math.round(i.progress * 100)}%` : 'Waiting'}
+            right={i.state === 'failed' ? <button className="btn btn-outline btn-sm" onClick={() => void upload([i.file])}>Retry</button> : undefined} />))}
+          {queue.every((i) => i.state === 'done' || i.state === 'failed') ? <Row title="Clear this list" onClick={() => setQueue([])} /> : null}</Section> : null}
+        {data ? <input className="input" placeholder={`Search your ${tracks.length || ''} songs`.replace('  ', ' ')} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search my music" style={{ marginTop: 12 }} /> : <div className="spinner" />}
+        {sel ? <div className="row" style={{ gap: 8, margin: '10px 0' }}><span className="grow muted">{sel.size} selected</span><button className="btn btn-soft btn-sm" onClick={() => setSel(new Set(tracks.map((t) => t.id)))}>All</button><button className="btn btn-soft btn-sm" disabled={!sel.size} onClick={() => setBulk(true)}>Set mood / genre</button><button className="btn btn-danger-ghost btn-sm" disabled={!sel.size} onClick={() => void removeSel()}>Delete</button></div> : null}
+        {data && !tracks.length ? <p className="help pad">{q ? 'No songs match.' : 'No songs yet. Add some above.'}</p> : null}
+        <Section>{tracks.map((t) => (
+          <div key={t.id} className="set-row">
+            {sel ? <input type="checkbox" checked={sel.has(t.id)} onChange={() => toggle(t.id)} aria-label={`Select ${t.title}`} /> : null}
+            <PlayBtn t={t} playing={playing === t.id} onToggle={() => setPlaying(playing === t.id ? null : t.id)} audio={audio} />
+            <span className="grow" style={{ textAlign: 'left', minWidth: 0 }}><span className="set-t truncate" style={{ display: 'block' }}>{t.title}</span><span className="set-s truncate" style={{ display: 'block' }}>{[t.artist, t.mood, t.genre].filter(Boolean).join(' · ') || 'No details'}</span></span>
+            <button className="icon-btn" aria-label={t.starred ? `Unstar ${t.title}` : `Star ${t.title}`} onClick={async () => { await api.patch(`/api/music/${t.id}`, { starred: !t.starred }).catch(toastError); void load(); }}><Icon name="star" size={20} fill={t.starred} /></button>
+            <button className="icon-btn" aria-label={`Edit ${t.title}`} onClick={() => setEdit(t)}><Icon name="edit" size={20} /></button>
+            <button className="icon-btn" aria-label={`Delete ${t.title}`} onClick={async () => { await api.del(`/api/music/${t.id}`).catch(toastError); void load(); }}><Icon name="trash" size={20} /></button>
+          </div>))}</Section>
+        <audio ref={audio} onEnded={() => setPlaying(null)} />
+      </div>
+      {edit ? <EditSong t={edit} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void load(); }} /> : null}
+      {bulk ? <BulkTags ids={[...(sel ?? [])]} moods={data?.moods ?? []} genres={data?.genres ?? []} onClose={() => setBulk(false)} onSaved={() => { setBulk(false); setSel(null); void load(); }} /> : null}
+    </Page>
+  );
+}
+function PlayBtn({ t, playing, onToggle, audio }: { t: Track; playing: boolean; onToggle: () => void; audio: React.RefObject<HTMLAudioElement | null> }) {
+  const m = useMedia(playing ? t.mediaId : null);
+  useEffect(() => { const a = audio.current; if (!a) return; if (playing && m) { a.src = m.url; void a.play().catch(() => {}); } else a.pause(); }, [playing, m?.url]);  // eslint-disable-line
+  return <button className="icon-btn" onClick={onToggle} aria-label={playing ? `Pause ${t.title}` : `Play ${t.title}`}><Icon name={playing ? 'pause' : 'play'} size={20} fill /></button>;
+}
+function EditSong({ t, moods, genres, onClose, onSaved }: { t: Track; moods: string[]; genres: string[]; onClose: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState(t.title); const [artist, setArtist] = useState(t.artist); const [mood, setMood] = useState(t.mood); const [genre, setGenre] = useState(t.genre);
+  return <Dialog title="Edit song" onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!title.trim()} onClick={async () => { await guard(api.patch(`/api/music/${t.id}`, { title: title.trim(), artist: artist.trim(), mood, genre })); onSaved(); }}>Save</button></>}>
+    <label className="field"><span className="label-t">Title</span><input className="input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} /></label>
+    <label className="field"><span className="label-t">Artist</span><input className="input" value={artist} maxLength={120} onChange={(e) => setArtist(e.target.value)} /></label>
+    <label className="field"><span className="label-t">Mood</span><select className="select" value={mood} onChange={(e) => setMood(e.target.value)}><option value="">None</option>{moods.map((m) => <option key={m}>{m}</option>)}</select></label>
+    <label className="field"><span className="label-t">Genre</span><select className="select" value={genre} onChange={(e) => setGenre(e.target.value)}><option value="">None</option>{genres.map((g) => <option key={g}>{g}</option>)}</select></label>
+  </Dialog>;
+}
+function BulkTags({ ids, moods, genres, onClose, onSaved }: { ids: string[]; moods: string[]; genres: string[]; onClose: () => void; onSaved: () => void }) {
+  const [mood, setMood] = useState('-'); const [genre, setGenre] = useState('-'); // "-" means leave unchanged
+  return <Dialog title={`Set tags for ${ids.length} song${ids.length === 1 ? '' : 's'}`} onClose={onClose} footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={async () => { await Promise.all(ids.map((id) => api.patch(`/api/music/${id}`, { ...(mood !== '-' ? { mood } : {}), ...(genre !== '-' ? { genre } : {}) }).catch(() => {}))); onSaved(); }}>Apply</button></>}>
+    <label className="field"><span className="label-t">Mood</span><select className="select" value={mood} onChange={(e) => setMood(e.target.value)}><option value="-">Leave as is</option><option value="">Clear</option>{moods.map((m) => <option key={m}>{m}</option>)}</select></label>
+    <label className="field"><span className="label-t">Genre</span><select className="select" value={genre} onChange={(e) => setGenre(e.target.value)}><option value="-">Leave as is</option><option value="">Clear</option>{genres.map((g) => <option key={g}>{g}</option>)}</select></label>
+  </Dialog>;
 }

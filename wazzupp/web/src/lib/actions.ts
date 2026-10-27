@@ -1,3 +1,4 @@
+import { announceMusicChanged } from './music.ts';
 import { api, ApiError, setToken, setUnauthorizedHandler } from './api.ts';
 import { getState, resetState, setState, sortConvs, toast } from './store.ts';
 import type { CallHistory, Conv, Me, Msg } from './types.ts';
@@ -266,6 +267,7 @@ export function applyEvent(type: string, p: any) {
     case 'settings.update': case 'profile.update': refreshMe().catch(() => {}); break;
     case 'blocks.update': loadConversations().catch(() => {}); break;
     case 'status.new': case 'status.viewed': case 'status.reaction': loadStatus().catch(() => {}); break;
+    case 'music.changed': announceMusicChanged(); break;
     case 'devices.update': break;
     case 'security.new_login': toast(`New sign-in on ${p.deviceName}${p.suspicious ? ' from an unfamiliar location' : ''}`); loadNotifications().catch(() => {}); break;
     case 'call.incoming': case 'call.state': void import('./rtc.ts').then((r) => r.onCallEvent(type, p)); break;
