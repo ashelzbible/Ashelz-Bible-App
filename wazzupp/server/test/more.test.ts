@@ -1,7 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
+import { Client, Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
+import { config } from '../src/config.ts';
 
 let ctx: Ctx;
 before(async () => { ctx = await start(); });
@@ -77,5 +78,48 @@ describe('starred, events and feedback', () => {
     assert.equal((await a.post('/api/feedback', { kind: 'bug', message: 'The call button does nothing on my tablet' })).status, 201);
     assert.equal((await a.post('/api/feedback', { message: 'x' })).status, 400);
     assert.equal((await a.post('/api/feedback', { message: 'y'.repeat(5000) })).status, 400);
+  });
+});
+
+describe('sign in with Google', () => {
+  const CLIENT = 'test-client.apps.googleusercontent.com';
+  const tokens = new Map<string, any>();
+  const realFetch = globalThis.fetch;
+  before(() => {
+    (config as any).googleClientId = CLIENT;
+    globalThis.fetch = (async (url: any, init?: any) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/tokeninfo')) { const t = tokens.get(new URL(u).searchParams.get('id_token')!); return t ? new Response(JSON.stringify(t), { status: 200 }) : new Response('{}', { status: 400 }); }
+      return realFetch(url, init);
+    }) as typeof fetch;
+  });
+  after(() => { globalThis.fetch = realFetch; (config as any).googleClientId = ''; });
+  const claims = (over: any = {}) => ({ iss: 'https://accounts.google.com', aud: CLIENT, email: 'gina@example.com', email_verified: 'true', name: 'Gina Google', exp: String(Math.floor(Date.now() / 1000) + 600), ...over });
+  const tok = (c: any) => { const t = 'tok-' + Math.random().toString(36).slice(2) + 'x'.repeat(20); tokens.set(t, c); return t; };
+
+  it('creates a verified account on first use, signs the same person in again, and rejects bad tokens', async () => {
+    const c = new Client(ctx);
+    assert.equal((await c.get('/api/auth/config')).body.googleClientId, CLIENT);
+    const first = await c.post('/api/auth/google', { credential: tok(claims()) });
+    assert.equal(first.status, 201); assert.equal(first.body.user.displayName, 'Gina Google'); assert.equal(first.body.user.emailVerified, true); assert.equal(first.body.user.username, 'gina');
+    const again = await c.post('/api/auth/google', { credential: tok(claims()) });
+    assert.equal(again.status, 200); assert.equal(again.body.user.id, first.body.user.id);
+    assert.equal((await c.post('/api/auth/google', { credential: tok(claims({ aud: 'someone-else' })) })).status, 401, 'token for another app');
+    assert.equal((await c.post('/api/auth/google', { credential: tok(claims({ email_verified: 'false', email: 'x@example.com' })) })).status, 401);
+    assert.equal((await c.post('/api/auth/google', { credential: tok(claims({ exp: '1' })) })).status, 401);
+    assert.equal((await c.post('/api/auth/google', { credential: 'not-a-real-token-at-all-000' })).status, 401);
+    // someone else with the same local part gets a different username
+    const other = await c.post('/api/auth/google', { credential: tok(claims({ email: 'gina@another.org', name: 'Gina Two' })) });
+    assert.equal(other.status, 201); assert.notEqual(other.body.user.username, 'gina');
+  });
+
+  it('is off when no client ID is configured, and links to an existing password account by verified email', async () => {
+    const pw = await newUser(ctx, 'linker');
+    const email = pw.user.email as string;
+    const r = await new Client(ctx).post('/api/auth/google', { credential: tok(claims({ email, name: 'Linker' })) });
+    assert.equal(r.status, 200); assert.equal(r.body.user.id, pw.user.id);
+    (config as any).googleClientId = '';
+    assert.equal((await new Client(ctx).post('/api/auth/google', { credential: tok(claims()) })).status, 400);
+    (config as any).googleClientId = CLIENT;
   });
 });

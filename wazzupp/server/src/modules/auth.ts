@@ -77,7 +77,58 @@ async function checkTotp(userId: string, secretSealed: string, code: string): Pr
   return r.rowCount === 1;
 }
 
+/** Verifies a Google Identity Services ID token with Google and checks it was issued for this app. */
+async function verifyGoogleToken(credential: string): Promise<{ email: string; name: string }> {
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+  if (!res || !res.ok) throw unauthorized('invalid_google_token', 'Google could not verify that sign-in. Try again.');
+  const t: any = await res.json();
+  const okIss = t.iss === 'https://accounts.google.com' || t.iss === 'accounts.google.com';
+  if (t.aud !== config.googleClientId || !okIss || String(t.email_verified) !== 'true' || !t.email || Number(t.exp) * 1000 < Date.now()) throw unauthorized('invalid_google_token', 'Google could not verify that sign-in. Try again.');
+  return { email: String(t.email).toLowerCase(), name: String(t.name || t.given_name || String(t.email).split('@')[0]).slice(0, 60) };
+}
+
 export async function authRoutes(app: FastifyInstance) {
+  // What the sign-in screen needs to know before anyone is signed in.
+  app.get('/api/auth/config', async () => ({ googleClientId: config.googleClientId || null }));
+
+  app.post('/api/auth/google', async (req, reply) => {
+    if (!config.googleClientId) throw badRequest('google_not_configured', 'Sign in with Google is not set up on this server');
+    const body = parse(z.object({ credential: z.string().min(20).max(5000), ...deviceInfo }), req.body);
+    await rateLimit(`google-ip:${clientIp(req)}`, 30, 600);
+    const g = await verifyGoogleToken(body.credential);
+    let u = await one(`select id, status, mfa_enabled from users where email = $1`, [g.email]);
+    let created = false;
+    if (u) {
+      if (u.status === 'deleted') throw unauthorized('invalid_credentials', 'Incorrect login details');
+      if (u.status === 'suspended') throw forbidden('account_suspended', 'This account is suspended. You can submit an appeal.');
+      if (u.mfa_enabled) throw unauthorized('use_password', 'This account uses two-step verification. Sign in with your password and code.');
+      await q(`update users set email_verified_at = coalesce(email_verified_at, now()) where id = $1`, [u.id]);
+    } else {
+      const open = await one(`select enabled from feature_flags where key = 'registration_open'`);
+      if (open && !open.enabled) throw forbidden('registration_closed');
+      await rateLimit(`reg:${clientIp(req)}`, 10, 3600);
+      const base = (g.email.split('@')[0].toLowerCase().replace(/[^a-z0-9._]/g, '') || 'user').slice(0, 24).padEnd(3, '0');
+      const hash = await hashPassword(token(32)); // nobody knows this password; the account is entered through Google or a password reset
+      for (let i = 0; i < 8 && !u; i++) {
+        const name = i === 0 ? base : `${base}${Math.floor(1000 + Math.random() * 9000)}`;
+        try {
+          u = await tx(async (t) => {
+            const r = await t.one(`insert into users(email, username, password_hash, email_verified_at) values ($1,$2,$3, now()) returning id`, [g.email, name, hash]);
+            await t.q(`insert into user_profiles(user_id, display_name) values ($1,$2)`, [r.id, g.name]);
+            return { id: r.id as string, status: 'active', mfa_enabled: false };
+          });
+        } catch (e: any) { if (e.code !== '23505' || !String(e.constraint).includes('username')) throw e; }
+      }
+      if (!u) throw conflict('username_taken', 'Could not create an account. Try again.');
+      created = true;
+      if (config.adminEmails.includes(g.email)) await q(`update users set role = 'admin' where id = $1`, [u.id]);
+    }
+    const sess = await createSession(u.id, body, req);
+    if (!created) await newLoginAlert(u.id, sess.deviceId, req.ip, body.deviceName);
+    reply.code(created ? 201 : 200);
+    return { token: sess.token, deviceId: sess.deviceId, user: await loadSelf(u.id) };
+  });
+
   app.post('/api/auth/register', async (req, reply) => {
     const body = parse(z.object({
       username, password, displayName: z.string().trim().min(1).max(60),

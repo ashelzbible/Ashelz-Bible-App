@@ -316,3 +316,6 @@ body[data-wallpaper='plain'] .wallpaper { background-image: none; }
 .bottom-nav button { font-size: calc(15px * var(--fs)); line-height: calc(20px * var(--fs)); font-weight: 500; color: #111B21; } .bottom-nav button.active { font-weight: 600; }
 .m-search input, .rail-search input { font-size: calc(17px * var(--fs)); font-weight: 400; } .m-search input::placeholder, .rail-search input::placeholder { color: #667781; }
 :root[data-theme='dark'] .app.mobile .conv-name, :root[data-theme='dark'] .bottom-nav button { color: var(--text); } :root[data-theme='dark'] .app.mobile .conv-prev, :root[data-theme='dark'] .app.mobile .conv-time { color: var(--text-2); }
+
+.google-sso { display: grid; gap: 14px; margin-top: 16px; } .or-line { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-size: .875rem; } .or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.google-btn { display: flex; justify-content: center; min-height: 44px; }

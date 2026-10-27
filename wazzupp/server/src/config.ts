@@ -50,6 +50,7 @@ export const config = {
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
   // Test deployments only: accept short, common passwords. Leave unset for a real launch.
   relaxedPasswords: env.RELAXED_PASSWORDS === 'true',
+  googleClientId: env.GOOGLE_CLIENT_ID || '',
   tenorApiKey: env.TENOR_API_KEY || '',
   adminEmails: (env.ADMIN_EMAILS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   rateLimitDisabled: env.RATE_LIMIT_DISABLED === 'true' && !isProd,

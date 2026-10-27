@@ -39,7 +39,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(helmet, {
-    contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', ...(config.tenorApiKey ? ['https://media.tenor.com', 'https://c.tenor.com'] : [])], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'", 'ws:', 'wss:'], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"] } },
+    contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'", ...(config.googleClientId ? ['https://accounts.google.com/gsi/client'] : [])], styleSrc: ["'self'", "'unsafe-inline'", ...(config.googleClientId ? ['https://accounts.google.com/gsi/style'] : [])], frameSrc: config.googleClientId ? ["'self'", 'https://accounts.google.com/gsi/'] : ["'none'"], imgSrc: ["'self'", 'data:', 'blob:', ...(config.tenorApiKey ? ['https://media.tenor.com', 'https://c.tenor.com'] : [])], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'", 'ws:', 'wss:', ...(config.googleClientId ? ['https://accounts.google.com/gsi/'] : [])], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"] } },
     crossOriginResourcePolicy: { policy: 'same-origin' },
   });
   await app.register(cors, { origin: config.corsOrigins.length ? config.corsOrigins : false, credentials: false });

@@ -41,6 +41,29 @@ function Field({ label, children, error }: { label: string; children: ReactNode;
   return <label className="field"><span className="label-t">{label}</span>{children}{error ? <span className="err">{error}</span> : null}</label>;
 }
 
+/** "Sign in with Google" button, shown only when the server has a Google client ID. */
+function GoogleButton({ onError, onBusy }: { onError: (m: string) => void; onBusy: (b: boolean) => void }) {
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => { api.get<{ googleClientId: string | null }>('/api/auth/config').then((r) => setClientId(r.googleClientId)).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!clientId || !host) return;
+    const init = () => {
+      const g = (window as any).google?.accounts?.id; if (!g) return;
+      g.initialize({ client_id: clientId, callback: async (resp: { credential: string }) => {
+        onBusy(true); onError('');
+        try { await authenticate('/api/auth/google', { credential: resp.credential }); }
+        catch (ex) { onError(ex instanceof ApiError ? ex.message : 'Google sign-in failed'); } finally { onBusy(false); }
+      } });
+      g.renderButton(host, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.min(340, host.clientWidth || 320) });
+    };
+    if ((window as any).google?.accounts?.id) { init(); return; }
+    const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = init; document.head.appendChild(s);
+  }, [clientId, host]);  // eslint-disable-line
+  if (!clientId) return null;
+  return <div className="google-sso"><div className="or-line"><span>or</span></div><div ref={setHost} className="google-btn" /></div>;
+}
+
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
   const [busy, setBusy] = useState(false);
@@ -89,6 +112,7 @@ export function AuthScreen() {
         {err ? <div className="notice bad" role="alert">{err}</div> : null}
         <button className="btn btn-primary btn-block" disabled={busy} type="submit" style={{ height: 48 }}>{busy ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : { login: 'Sign in', register: 'Create account', forgot: 'Send code', reset: 'Change password' }[mode]}</button>
       </form>
+      {(mode === 'login' || mode === 'register') ? <GoogleButton onError={setErr} onBusy={setBusy} /> : null}
       <div className="auth-links">
         {mode === 'login' && <><button onClick={() => { setMode('forgot'); setErr(''); }}>Forgot password?</button><button onClick={() => { setMode('register'); setErr(''); }}>Create an account</button></>}
         {mode !== 'login' && <button onClick={() => { setMode('login'); setErr(''); }}>Back to sign in</button>}
