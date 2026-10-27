@@ -137,7 +137,6 @@ export function ChatList() {
   );
   const actions = (<>
     {layout === 'desktop' ? <button className="icon-btn on-dark" onClick={() => setDlg('chat')} aria-label="New chat" title="New chat"><Icon name="chat-plus" /></button> : null}
-    {layout === 'desktop' ? <button className="icon-btn on-dark" aria-label="Filter chats" title="Filter chats" onClick={(e) => menu.open((['all', 'unread', 'favorites', 'groups'] as const).map((f) => ({ label: f[0].toUpperCase() + f.slice(1), icon: 'filter' as const, selected: filter === f && !showArchived, onClick: () => { setFilter(f); setShowArchived(false); } })), e)}><Icon name="filter" /></button> : null}
     {layout === 'mobile' ? <button className="icon-btn on-dark" onClick={() => setSearchOpen((v) => !v)} aria-label="Search"><Icon name="search" /></button> : null}
     {layout !== 'desktop' ? <button className="icon-btn on-dark" onClick={() => go('status/new/camera')} aria-label="Camera" title="Camera: post a photo or video status"><Icon name="camera" /></button> : null}
     <button className="icon-btn on-dark" aria-label="More options" onClick={(e) => menu.open([
@@ -169,7 +168,7 @@ export function ChatList() {
   );
   return (
     <>
-      <PaneFrame title={layout === 'mobile' ? 'Wazzupp' : 'Chats'} search={layout === 'mobile' && !searchOpen && !q ? undefined : search} actions={actions} filters={layout === 'desktop' ? undefined : filters} strip={layout === 'mobile' && !q ? <StatusStrip /> : undefined}>{body}</PaneFrame>
+      <PaneFrame title="Wazzupp" search={layout === 'mobile' && !searchOpen && !q ? undefined : search} actions={actions} filters={filters} strip={layout === 'mobile' && !q ? <StatusStrip /> : undefined}>{body}</PaneFrame>
       {layout !== 'desktop' ? <button className="fab" onClick={() => setDlg('chat')} aria-label="New chat"><Icon name="chat-plus" size={24} /></button> : null}
       {ctx.node}{menu.node}
       {dlg === 'chat' ? <NewChatDialog onClose={() => setDlg(null)} onGroup={() => setDlg('group')} onCommunity={() => setDlg('community')} /> : null}

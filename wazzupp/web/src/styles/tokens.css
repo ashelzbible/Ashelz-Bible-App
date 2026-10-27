@@ -59,7 +59,7 @@
   --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-pill: 999px;
   --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /* Roboto is bundled with the app (no external font host) */ /* native: Roboto on Android, San Francisco on iOS/macOS, Segoe UI on Windows */
   --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;
-  --fs: 1;
+  --fs: .92; /* Default size: a little more compact than before */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --ease: cubic-bezier(.2, .7, .2, 1);
