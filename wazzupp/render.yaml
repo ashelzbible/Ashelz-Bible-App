@@ -17,6 +17,8 @@ services:
         value: "true"   # testing only: accepts any password of 4+ characters. Remove before real users sign up.
       - key: GOOGLE_CLIENT_ID   # a public identifier, safe to keep in the repo
         value: 180527382695-lvfj0ia6ts5idqkp1a9jdlrg1899emps.apps.googleusercontent.com
+      - key: MEDIA_STORE
+        value: db   # keep photos, voice notes and avatars in the database so they survive redeploys
       - key: REQUIRE_VERIFICATION
         value: "false"   # no email service is configured yet, so skip the emailed code
 databases:

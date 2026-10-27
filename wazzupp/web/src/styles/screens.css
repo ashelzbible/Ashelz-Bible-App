@@ -319,3 +319,6 @@ body[data-wallpaper='plain'] .wallpaper { background-image: none; }
 
 .google-sso { display: grid; gap: 14px; margin-top: 16px; } .or-line { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-size: .875rem; } .or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .google-btn { display: flex; justify-content: center; min-height: 44px; }
+.cover.art { background-size: cover; background-position: center; } .mus-sec-title { font-size: 1.1rem; margin: 6px 2px 4px; color: #aab6bd; font-weight: 500; }
+.mus-credit { color: #8e9ca4; font-size: .8125rem; text-align: center; padding: 16px 12px; } .mus-credit a { color: #25F29A; }
+.st-track img, .story-song img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; } .st-track-t { color: #fff; min-width: 0; display: grid; text-align: left; } .story-song a { color: #fff; text-decoration: underline; }

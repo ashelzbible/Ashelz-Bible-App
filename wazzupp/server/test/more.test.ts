@@ -1,9 +1,10 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Client, Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
+import { Client, PNG, Socket, dm, newUser, say, start, type Ctx } from './helpers.ts';
 import { config } from '../src/config.ts';
 import { refreshProviderIce } from '../src/lib/ice.ts';
+import { DbStorage } from '../src/lib/storage.ts';
 
 let ctx: Ctx;
 before(async () => { ctx = await start(); });
@@ -143,5 +144,43 @@ describe('TURN credentials from a provider API', () => {
       assert.deepEqual(turn.urls, ['turn:turn.example.test:3478?transport=udp', 'turns:turn.example.test:443?transport=tcp'], 'port 53 is dropped');
       assert.equal(turn.credential, 'c1');
     } finally { globalThis.fetch = realFetch; (config as any).iceApi = { url: '', token: '', ttlSeconds: 86400 }; await refreshProviderIce(); }
+  });
+});
+
+describe('database media storage', () => {
+  it('stores, ranges, sizes and removes blobs', async () => {
+    const st = new DbStorage(); const key = `t/${randomUUID()}`;
+    await st.put(key, Buffer.from('0123456789'));
+    assert.equal(await st.size(key), 10);
+    const read = async (r?: { start: number; end: number }) => { const c: Buffer[] = []; for await (const x of st.open(key, r)) c.push(Buffer.from(x)); return Buffer.concat(c).toString(); };
+    assert.equal(await read(), '0123456789'); assert.equal(await read({ start: 2, end: 5 }), '2345');
+    await st.remove(key); await assert.rejects(() => st.size(key));
+  });
+});
+
+describe('licensed music catalogue', () => {
+  const realFetch = globalThis.fetch;
+  after(() => { globalThis.fetch = realFetch; (config as any).jamendoClientId = ''; });
+  it('searches through the server, filters to the catalogue host, and attaches a song to a status', async () => {
+    (config as any).jamendoClientId = 'test-id'; let asked = '';
+    globalThis.fetch = (async (url: any, init?: any) => {
+      const u = String(url);
+      if (u.startsWith('https://api.jamendo.com/')) { asked = u; return new Response(JSON.stringify({ headers: { status: 'success' }, results: [
+        { id: '1', name: 'Easy', artist_name: 'Someone', album_name: 'A', image: 'https://usercontent.jamendo.com/a.jpg', audio: 'https://prod-1.storage.jamendo.com/?trackid=1', duration: 120, license_ccurl: 'https://creativecommons.org/licenses/by/3.0/', shareurl: 'https://www.jamendo.com/track/1' },
+        { id: '2', name: 'Evil', artist_name: 'X', audio: 'https://evil.example.com/a.mp3', duration: 10 }] }), { status: 200 }); }
+      return realFetch(url, init);
+    }) as typeof fetch;
+    const a = await newUser(ctx, 'catalog'); const f = await newUser(ctx, 'catfriend'); await a.put(`/api/contacts/${f.user.id}`, {});
+    const r = (await a.get('/api/music/catalog?q=easy')).body;
+    assert.equal(r.configured, true); assert.equal(r.results.length, 1, 'tracks from other hosts are dropped'); assert.equal(r.results[0].title, 'Easy'); assert.equal(r.results[0].durationMs, 120000);
+    assert.match(asked, /search=easy/); assert.doesNotMatch(JSON.stringify(r), /test-id/, 'the API key never reaches the browser');
+    const img = await a.upload(PNG, 'p.png', 'image');
+    const bad = await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: 'https://evil.example.com/a.mp3' }); assert.equal(bad.status, 400);
+    const ok = await a.post('/api/status', { kind: 'image', mediaId: img.body.media.id, audioUrl: r.results[0].previewUrl, audioArt: r.results[0].artUrl, audioCredit: r.results[0].shareUrl, audioTitle: 'Easy · Someone' });
+    assert.equal(ok.status, 201);
+    const item = (await f.get('/api/status')).body.feed[0].items[0];
+    assert.equal(item.audioUrl, r.results[0].previewUrl); assert.equal(item.audioTitle, 'Easy · Someone');
+    (config as any).jamendoClientId = '';
+    assert.equal((await a.get('/api/music/catalog')).body.configured, false);
   });
 });

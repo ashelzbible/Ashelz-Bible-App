@@ -7,7 +7,7 @@ import { loadStatus, toastError } from '../lib/actions.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { Dialog } from '../ui/Overlay.tsx';
 import { CameraCapture } from './Camera.tsx';
-import { ColorSlider, MusicSheet, OverlayView, StickerSheet, TEXT_FONTS, drawOverlay, type Overlay, type Track } from './StatusTools.tsx';
+import { ColorSlider, MusicSheet, OverlayView, StickerSheet, TEXT_FONTS, drawOverlay, type CatalogTrack, type Overlay, type Track } from './StatusTools.tsx';
 
 export const BGS = ['#003B32', '#0B6E5C', '#1B5E8A', '#6A3A8C', '#B34A2E', '#8C6A1B', '#2E2E2E', '#AD8B73', '#C2185B', '#37474F'];
 export const FONTS = ['system-ui, sans-serif', 'Georgia, "Times New Roman", serif', 'ui-monospace, Menlo, Consolas, monospace', '"Brush Script MT", "Segoe Script", cursive', '"Arial Narrow", "Roboto Condensed", Impact, sans-serif'];
@@ -117,7 +117,7 @@ function MediaEditor({ file, chip, onBack, onReplace, post, onClose }: { file: F
   const [overlays, setOverlays] = useState<Overlay[]>([]); const [sel, setSel] = useState<string | null>(null); const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [pen, setPen] = useState<PenKind>('pen'); const [hue, setHue] = useState(0); const [color, setColor] = useState('#FFFFFF');
   const [textDraft, setTextDraft] = useState<{ id?: string; text: string; font: number; align: 'left' | 'center' | 'right'; hl: boolean } | null>(null);
-  const [track, setTrack] = useState<Track | null>(null); const [caption, setCaption] = useState(''); const [busy, setBusy] = useState(false); const [mention, setMention] = useState(false);
+  const [track, setTrack] = useState<Track | null>(null); const [song, setSong] = useState<CatalogTrack | null>(null); const [caption, setCaption] = useState(''); const [busy, setBusy] = useState(false); const [mention, setMention] = useState(false);
   const base = useRef<HTMLCanvasElement>(null); const ink = useRef<HTMLCanvasElement>(null); const pick = useRef<HTMLInputElement>(null); const stage = useRef<HTMLDivElement>(null);
   const drawing = useRef<Stroke | null>(null); const moved = useRef(false);
 
@@ -183,14 +183,14 @@ function MediaEditor({ file, chip, onBack, onReplace, post, onClose }: { file: F
           <button className="st-btn" onClick={() => setTextDraft((d) => d && { ...d, align: d.align === 'center' ? 'left' : d.align === 'left' ? 'right' : 'center' })} aria-label="Text alignment"><Icon name="menu-lines" size={22} /></button>
           <button className={`st-btn ${textDraft?.hl ? 'on' : ''}`} onClick={() => setTextDraft((d) => d && { ...d, hl: !d.hl })} aria-label="Text highlight"><b>A<sup>+</sup></b></button></div>
         : <div className="st-top"><button className="st-btn" onClick={onBack} aria-label="Close editor"><Icon name="x" size={26} /></button><span className="grow" />
-          {<button className={`st-btn ${track ? 'on' : ''}`} onClick={() => setTool('music')} aria-label="Add music"><Icon name="music" size={22} /></button>}
+          {<button className={`st-btn ${track || song ? 'on' : ''}`} onClick={() => setTool('music')} aria-label="Add music"><Icon name="music" size={22} /></button>}
           {imageTools ? <>
             <button className={`st-btn ${tool === 'crop' ? 'on' : ''}`} onClick={() => setTool(tool === 'crop' ? null : 'crop')} aria-label="Crop and rotate"><Icon name="crop" size={22} /></button>
             <button className="st-btn" onClick={() => setTool('sticker')} aria-label="Stickers"><Icon name="sticker" size={22} /></button>
             <button className="st-btn" onClick={() => { setTextDraft({ text: '', font: 0, align: 'center', hl: false }); setTool('text'); }} aria-label="Add text"><b>Aa</b></button>
             <button className="st-btn" onClick={() => setTool('draw')} aria-label="Draw"><Icon name="edit" size={22} /></button></> : null}
         </div>}
-      {track && !editing ? <div className="st-track"><Icon name="music" size={16} /><span className="truncate">{track.title}{track.artist ? ` · ${track.artist}` : ''}</span><button onClick={() => setTrack(null)} aria-label="Remove music"><Icon name="x" size={14} /></button></div> : null}
+      {(track || song) && !editing ? <div className="st-track">{song?.artUrl ? <img src={song.artUrl} alt="" /> : <Icon name="music" size={16} />}<button className="st-track-t" onClick={() => setTool('music')} aria-label="Change song"><span className="truncate">{(track ?? song)!.title}{(track ?? song)!.artist ? ` · ${(track ?? song)!.artist}` : ''}</span></button><button onClick={() => { setTrack(null); setSong(null); }} aria-label="Remove music"><Icon name="x" size={14} /></button></div> : null}
       <div className="st-stage-wrap">{stageEl}
         {tool === 'text' && textDraft ? <textarea className="st-text-edit" autoFocus value={textDraft.text} onChange={(e) => setTextDraft({ ...textDraft, text: e.target.value })} placeholder="Add text" maxLength={200} aria-label="Overlay text" style={{ fontFamily: TEXT_FONTS[textDraft.font], textAlign: textDraft.align, color: textDraft.hl ? (color === '#FFFFFF' ? '#000' : '#fff') : color, background: textDraft.hl ? color : 'transparent' }} /> : null}
         {editing ? <ColorSlider value={hue} onChange={(t, c) => { setHue(t); setColor(c); }} /> : null}
@@ -209,7 +209,7 @@ function MediaEditor({ file, chip, onBack, onReplace, post, onClose }: { file: F
         {mention ? <div className="st-bar wrap">{contacts.slice(0, 12).map((c) => <button key={c.id} onClick={() => { setCaption((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}@${c.username} `); setMention(false); }}>@{c.username}</button>)}{!contacts.length ? <span className="muted">No contacts yet</span> : null}</div> : null}
         <div className="st-send-row">{chip}<button className="st-send" onClick={() => void send()} disabled={busy} aria-label="Post status">{busy ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : <Icon name="send" size={22} fill />}</button></div></> : null}
       {tool === 'sticker' ? <StickerSheet onClose={() => setTool(null)} onAdd={addOverlay} onMusic={() => setTool('music')} /> : null}
-      {tool === 'music' ? <MusicSheet onClose={() => setTool(null)} onPick={(t) => { setTrack(t); setTool(null); }} /> : null}
+      {tool === 'music' ? <MusicSheet onClose={() => setTool(null)} onPick={(t) => { setTrack(t); setSong(null); setTool(null); }} onPickCatalog={(t) => { setSong(t); setTrack(null); setTool(null); }} /> : null}
       <input ref={pick} type="file" hidden accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onReplace(f); }} />
       <button hidden onClick={onClose} aria-hidden="true" tabIndex={-1} />
     </div>

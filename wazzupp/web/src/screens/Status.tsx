@@ -95,10 +95,10 @@ function ExploreChannelsDialog({ onClose }: { onClose: () => void }) {
 
 export function StatusEmpty() { return <div className="conv-empty dark"><div className="empty"><div className="empty-art"><Icon name="dashed" size={38} stroke={1.6} /></div><h3>View status updates</h3><p>Click a contact to see their update. Updates last 24 hours.</p></div></div>; }
 
-function StatusSong({ id, paused, title }: { id: string; paused: boolean; title?: string }) {
-  const m = useMedia(id); const a = useRef<HTMLAudioElement>(null);
+function StatusSong({ id, url, art, credit, paused, title }: { id?: string; url?: string | null; art?: string | null; credit?: string | null; paused: boolean; title?: string }) {
+  const own = useMedia(id); const m = url ? { url } : own; const a = useRef<HTMLAudioElement>(null);
   useEffect(() => { const el = a.current; if (!el) return; if (paused) el.pause(); else void el.play().catch(() => {}); }, [paused, m?.url]);
-  return <>{m ? <audio ref={a} src={m.url} autoPlay loop /> : null}<span className="story-song"><Icon name="music" size={14} /> {title || 'Music'}</span></>;
+  return <>{m ? <audio ref={a} src={m.url} autoPlay loop /> : null}<span className="story-song">{art ? <img src={art} alt="" /> : <Icon name="music" size={14} />} {credit ? <a href={credit} target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>{title || 'Music'}</a> : title || 'Music'}</span></>;
 }
 
 function Slide({ item, paused, onDone, onProgress }: { item: StatusItem; paused: boolean; onDone: () => void; onProgress: (p: number) => void }) {
@@ -115,7 +115,7 @@ function Slide({ item, paused, onDone, onProgress }: { item: StatusItem; paused:
   if (item.kind === 'text') return <div className="slide text" style={{ background: item.background ?? BGS[0] }}><p style={{ fontFamily: FONTS[item.font ?? 0] }}>{item.body}</p></div>;
   if (item.kind === 'voice') return <div className="slide text" style={{ background: item.background ?? BGS[1] }}>{m ? <div className="voice-slide"><Icon name="mic" size={56} /><audio ref={audio} src={m.url} controls autoPlay onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} /></div> : <div className="spinner" style={{ borderTopColor: '#fff' }} />}</div>;
   if (!m) return <div className="slide"><div className="spinner" style={{ borderTopColor: '#fff' }} /></div>;
-  return <div className="slide">{item.audioMediaId ? <StatusSong id={item.audioMediaId} paused={paused} title={item.audioTitle} /> : null}{item.kind === 'image' ? <img src={m.url} alt={item.caption || 'Status'} /> : <video ref={video} src={m.url} autoPlay playsInline onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} />}</div>;
+  return <div className="slide">{item.audioMediaId ? <StatusSong id={item.audioMediaId} paused={paused} title={item.audioTitle} /> : item.audioUrl ? <StatusSong url={item.audioUrl} art={item.audioArt} credit={item.audioCredit} paused={paused} title={item.audioTitle} /> : null}{item.kind === 'image' ? <img src={m.url} alt={item.caption || 'Status'} /> : <video ref={video} src={m.url} autoPlay playsInline onEnded={onDone} onTimeUpdate={(e) => onProgress(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} />}</div>;
 }
 
 export function StatusViewer({ userId }: { userId: string }) {

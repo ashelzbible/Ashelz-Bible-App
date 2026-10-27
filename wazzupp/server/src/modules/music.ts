@@ -4,6 +4,9 @@ import { one, q } from '../db/pool.ts';
 import { authenticateVerified, parse } from '../lib/http.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
 import { removeMediaIfUnreferenced } from './media.ts';
+import { config } from '../config.ts';
+import { rateLimit } from '../lib/ratelimit.ts';
+import { HttpError } from '../lib/errors.ts';
 
 const uuid = z.string().uuid();
 const MOODS = ['Happy', 'Sad', 'Romantic', 'Calm', 'Energetic', 'Worship', 'Focus', 'Party'];
@@ -13,7 +16,29 @@ const GENRES = ['Pop', 'Hip-Hop/Rap', 'Soul/R&B', 'Gospel', 'Rock', 'Afro', 'Dan
  * A personal music library for status updates. Wazzupp has no licensed catalogue, so people add their own audio files
  * (that they have the right to use) and tag them with a mood and genre; those tags drive the Mood and Genre tabs.
  */
+/** Hosts a catalogue track's audio and artwork may come from. Statuses only accept URLs on these. */
+export const CATALOG_HOST = /^https:\/\/([a-z0-9-]+\.)*jamendo\.com\//i;
+
 export async function musicRoutes(app: FastifyInstance) {
+  // Search the licensed catalogue (Jamendo: Creative Commons music with a free API). The API key stays on the server.
+  app.get('/api/music/catalog', { preHandler: authenticateVerified }, async (req) => {
+    const f = parse(z.object({ q: z.string().trim().max(100).default('') }), req.query);
+    if (!config.jamendoClientId) return { configured: false, results: [] };
+    await rateLimit(`catalog:${req.auth.userId}`, 60, 60);
+    const u = new URL('https://api.jamendo.com/v3.0/tracks/');
+    u.search = new URLSearchParams({ client_id: config.jamendoClientId, format: 'json', limit: '30', imagesize: '200', audioformat: 'mp32', ccnc: 'false', include: 'licenses',
+      ...(f.q ? { search: f.q, order: 'relevance' } : { order: 'popularity_week' }) }).toString();
+    const res = await fetch(u, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+    if (!res || !res.ok) throw new HttpError(502, 'catalog_unavailable', 'The music catalogue is not reachable right now. Try again in a moment.');
+    const j: any = await res.json();
+    if (j.headers?.status && j.headers.status !== 'success') throw new HttpError(502, 'catalog_unavailable', 'The music catalogue is not reachable right now. Try again in a moment.');
+    const results = (j.results ?? [])
+      .filter((r: any) => typeof r.audio === 'string' && CATALOG_HOST.test(r.audio))
+      .map((r: any) => ({ id: String(r.id), title: String(r.name), artist: String(r.artist_name), album: String(r.album_name ?? ''), artUrl: CATALOG_HOST.test(r.image ?? '') ? r.image : null,
+        previewUrl: r.audio, durationMs: Math.round(Number(r.duration ?? 0) * 1000) || null, license: r.license_ccurl || null, shareUrl: r.shareurl || null }));
+    return { configured: true, results };
+  });
+
   app.get('/api/music', { preHandler: authenticateVerified }, async (req) => {
     const f = parse(z.object({ q: z.string().max(100).default(''), tab: z.enum(['suggested', 'mood', 'genre', 'starred']).default('suggested') }), req.query);
     const term = `%${f.q.trim().replace(/[\\%_]/g, (c) => '\\' + c)}%`;

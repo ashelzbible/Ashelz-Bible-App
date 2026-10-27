@@ -124,18 +124,23 @@ function MyStickerThumb({ id, onPick }: { id: string; onPick: (src: string) => v
 }
 
 /* ---------------- music library ---------------- */
+/** A song from the licensed catalogue: referenced by URL, never copied. */
+export interface CatalogTrack { id: string; title: string; artist: string; album: string; artUrl: string | null; previewUrl: string; durationMs: number | null; license: string | null; shareUrl: string | null }
 export interface Track { id: string; mediaId: string; title: string; artist: string; mood: string; genre: string; starred: boolean; durationMs: number | null }
 const cover = (t: string) => { const h = [...t].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; return `linear-gradient(135deg, hsl(${h} 55% 38%), hsl(${(h + 50) % 360} 60% 22%))`; };
 
-export function MusicSheet({ onClose, onPick }: { onClose: () => void; onPick: (t: Track) => void }) {
-  const [tab, setTab] = useState<'suggested' | 'mood' | 'genre' | 'starred'>('suggested'); const [q, setQ] = useState('');
+export function MusicSheet({ onClose, onPick, onPickCatalog }: { onClose: () => void; onPick: (t: Track) => void; onPickCatalog: (t: CatalogTrack) => void }) {
+  const [cat, setCat] = useState<{ configured: boolean; results: CatalogTrack[] } | null>(null); const [catErr, setCatErr] = useState('');
+  const [tab, setTab] = useState<'catalog' | 'suggested' | 'mood' | 'genre' | 'starred'>('catalog'); const [q, setQ] = useState('');
   const [data, setData] = useState<{ tracks: Track[]; moods: string[]; genres: string[] } | null>(null); const [adding, setAdding] = useState<File | null>(null);
   const [playing, setPlaying] = useState<string | null>(null); const audio = useRef<HTMLAudioElement>(null); const file = useRef<HTMLInputElement>(null);
-  const load = () => api.get(`/api/music?tab=${tab}&q=${encodeURIComponent(q.trim())}`).then(setData).catch(toastError);
-  useEffect(() => { const t = setTimeout(() => void load(), q ? 250 : 0); return () => clearTimeout(t); }, [tab, q]);  // eslint-disable-line
+  const load = () => api.get(`/api/music?tab=${tab === 'catalog' ? 'suggested' : tab}&q=${encodeURIComponent(q.trim())}`).then(setData).catch(toastError);
+  const loadCat = () => { setCatErr(''); return api.get(`/api/music/catalog?q=${encodeURIComponent(q.trim())}`).then(setCat).catch((e) => { setCatErr(e?.message || 'The music catalogue could not be reached. Check your connection.'); setCat({ configured: true, results: [] }); }); };
+  useEffect(() => { const t = setTimeout(() => { if (tab === 'catalog') void loadCat(); else void load(); }, q ? 300 : 0); return () => clearTimeout(t); }, [tab, q]);  // eslint-disable-line
+  useEffect(() => { if (cat && !cat.configured && tab === 'catalog') setTab('suggested'); }, [cat, tab]);
   const star = async (t: Track) => { await api.patch(`/api/music/${t.id}`, { starred: !t.starred }).catch(toastError); void load(); };
   const del = async (t: Track) => { await api.del(`/api/music/${t.id}`).catch(toastError); void load(); };
-  const ph = { suggested: 'Search moods', mood: 'Search genres', genre: 'Search artists', starred: 'Search songs' }[tab]; // the placeholders the phone app uses per tab
+  const ph = { catalog: 'Search music…', suggested: 'Search your songs', mood: 'Search your songs', genre: 'Search your songs', starred: 'Search songs' }[tab]; // the placeholders the phone app uses per tab
   const tracks = data?.tracks ?? [];
   const row = (t: Track) => <TrackRow key={t.id} t={t} playing={playing === t.id} onPlay={() => setPlaying(playing === t.id ? null : t.id)} onStar={() => void star(t)} onPick={() => onPick(t)} onDelete={() => void del(t)} audioRef={audio} />;
   const groups = (keys: string[], by: 'mood' | 'genre') => keys.map((k) => ({ k, items: tracks.filter((t) => t[by] === k) })).filter((g) => g.items.length);
@@ -145,9 +150,9 @@ export function MusicSheet({ onClose, onPick }: { onClose: () => void; onPick: (
       <div className="st-sheet full" role="dialog" aria-label="Music">
         <div className="ep-grip" /><div className="mus-head"><button className="icon-btn" onClick={onClose} aria-label="Close music"><Icon name="back" /></button>
           <label className="mus-search"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={ph} aria-label="Search music" /></label><button className="mus-add" onClick={() => file.current?.click()} aria-label="Add song"><Icon name="plus" size={22} /></button></div>
-        <div className="mus-tabs" role="tablist">{(['suggested', 'mood', 'genre', 'starred'] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}</div>
+        <div className="mus-tabs" role="tablist">{((cat?.configured === false ? ['suggested', 'mood', 'genre', 'starred'] : ['catalog', 'suggested', 'mood', 'genre', 'starred']) as Array<'catalog' | 'suggested' | 'mood' | 'genre' | 'starred'>).map((t) => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t === 'catalog' ? 'Search' : t[0].toUpperCase() + t.slice(1)}</button>)}</div>
         <div className="mus-body">
-          {!data ? <p className="ep-empty">Loading…</p> : !tracks.length ? (
+          {tab === 'catalog' ? <CatalogList cat={cat} err={catErr} q={q} playing={playing} setPlaying={setPlaying} audioRef={audio} onPick={onPickCatalog} onRetry={() => void loadCat()} /> : !data ? <p className="ep-empty">Loading…</p> : !tracks.length ? (
             <div className="mus-empty"><span className="star-ring"><Icon name={tab === 'starred' ? 'star' : 'updates'} size={34} /></span><p>{tab === 'starred' ? 'Star your favourite audio so you can easily find it later.' : q ? 'No songs match your search.' : 'Add songs from your device to use them in your updates. Wazzupp has no built-in catalogue, so use music you have the right to share.'}</p>{tab !== 'starred' && !q ? <button className="btn btn-primary" onClick={() => file.current?.click()}>Add a song</button> : null}</div>
           ) : tab === 'suggested' ? <>
             <div className="mus-carousel">{tracks.slice(0, 5).map((t) => <div key={t.id} className="mus-feat" style={{ background: `linear-gradient(135deg, hsl(${[...t.title].reduce((a, c) => a + c.charCodeAt(0), 0) % 360} 35% 35%), #7a4560)` }}><span className="cover" style={{ background: cover(t.title) }}>{t.title[0]}</span><span className="grow"><b className="truncate">{t.title}</b><small className="truncate">{t.artist || 'Unknown artist'}</small></span><button className="mus-star" onClick={() => void star(t)} aria-label={t.starred ? 'Unstar' : 'Star'}><Icon name="star" size={26} fill={t.starred} /></button><button className="mus-go" onClick={() => onPick(t)} aria-label={`Use ${t.title}`}><Icon name="send" size={20} /></button></div>)}</div>
@@ -192,4 +197,21 @@ function AddSong({ file, moods, genres, onClose, onDone }: { file: File; moods: 
       <p className="muted">Only add music you have the right to share.</p>
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!title.trim() || busy} onClick={() => void save()}>{busy ? 'Adding…' : 'Add'}</button></div></div>
   );
+}
+
+function CatalogList({ cat, err, q, playing, setPlaying, audioRef, onPick, onRetry }: { cat: { configured: boolean; results: CatalogTrack[] } | null; err: string; q: string; playing: string | null; setPlaying: (id: string | null) => void; audioRef: React.RefObject<HTMLAudioElement | null>; onPick: (t: CatalogTrack) => void; onRetry: () => void }) {
+  useEffect(() => { const a = audioRef.current; if (!a) return; const t = cat?.results.find((r) => r.id === playing); if (t) { a.src = t.previewUrl; void a.play().catch(() => { toast('This song could not be played', 'error'); setPlaying(null); }); } else a.pause(); }, [playing]);  // eslint-disable-line
+  if (!cat) return <p className="ep-empty">Searching…</p>;
+  if (err) return <div className="mus-empty"><p>{err}</p><button className="btn btn-primary" onClick={onRetry}>Try again</button></div>;
+  if (!cat.results.length) return <div className="mus-empty"><span className="star-ring"><Icon name="search" size={34} /></span><p>{q ? `No songs found for “${q}”. Try another artist or title.` : 'No songs to show right now.'}</p></div>;
+  return <>
+    {!q ? <h3 className="mus-sec-title">Popular this week</h3> : null}
+    {cat.results.map((t) => (
+      <div className="mus-row" key={t.id}>
+        <button className="cover art" onClick={() => setPlaying(playing === t.id ? null : t.id)} aria-label={playing === t.id ? `Pause ${t.title}` : `Play preview of ${t.title}`} style={t.artUrl ? { backgroundImage: `url(${t.artUrl})` } : { background: cover(t.title) }}><Icon name={playing === t.id ? 'pause' : 'play'} size={22} fill /></button>
+        <span className="grow"><b className="truncate">{t.title}</b><small className="truncate">{t.artist}{t.durationMs ? ` · ${duration(t.durationMs / 1000)}` : ''}</small></span>
+        <button className="mus-go" onClick={() => onPick(t)} aria-label={`Use ${t.title} by ${t.artist}`}><Icon name="send" size={20} /></button>
+      </div>))}
+    <p className="mus-credit">Music from <a href="https://www.jamendo.com" target="_blank" rel="noopener noreferrer">Jamendo</a>. Each track is shared under its own Creative Commons licence.</p>
+  </>;
 }

@@ -420,3 +420,4 @@ route('DELETE', '/api/calls', () => { calls.length = 0; return [204, null]; });
 route('GET', '/api/calls/scheduled', () => ({ scheduled: [] }));
 route('POST', '/api/calls/scheduled', () => { throw new Err(503, 'demo_no_calls', 'Scheduling calls needs a real server'); });
 route('POST', '/api/status/:id/forward', () => { throw new Err(503, 'demo_unavailable', 'Forwarding statuses needs a real server'); });
+route('GET', '/api/music/catalog', () => ({ configured: false, results: [] }));

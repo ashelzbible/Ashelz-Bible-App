@@ -11,6 +11,8 @@
 | `TRUST_PROXY=true` | behind a reverse proxy (correct client IPs for rate limits) |
 | `REDIS_URL` | enables multi-instance fan-out, presence and shared rate limiting |
 | `SMTP_URL`, `MAIL_FROM` | verification/reset/new-login email (without it, mail only lands in the `outbox` table) |
+| `MEDIA_STORE=db` | store uploads in PostgreSQL instead of on disk (for hosts whose disk is erased on deploy; small installs only) |
+| `JAMENDO_CLIENT_ID` | enables the licensed music catalogue in status music (Jamendo, Creative Commons; check their API terms for commercial use) |
 | `MEDIA_DIR`, `STORAGE_QUOTA_BYTES` | local object storage root and per-user quota |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push (generate with `npx web-push generate-vapid-keys`) |
 | `STUN_URLS`, `TURN_URLS`, `TURN_SECRET` | ICE servers; `TURN_SECRET` is coturn's `static-auth-secret` |
