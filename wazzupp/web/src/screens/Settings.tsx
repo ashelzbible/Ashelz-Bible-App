@@ -10,24 +10,8 @@ import { Avatar } from '../ui/Avatar.tsx';
 import { Icon, type IconName } from '../ui/Icon.tsx';
 import { Confirm, Dialog } from '../ui/Overlay.tsx';
 import { Row, Section, Toggle } from '../ui/Misc.tsx';
-import { PaneFrame } from './Frame.tsx';
+import { AccessibilityPage, ChatsPage, EventsPage, HelpFeedbackPage, LanguagePage, StarredPage, StatusPrivacyPage } from './SettingsHome.tsx';
 import { uploadWithProgress } from '../lib/api.ts';
-
-const SECTIONS: Array<{ id: string; label: string; icon: IconName; sub: string }> = [
-  { id: 'profile', label: 'Profile', icon: 'user', sub: 'Name, photo, about' },
-  { id: 'account', label: 'Account & security', icon: 'key', sub: 'Password, two-step verification' },
-  { id: 'privacy', label: 'Privacy', icon: 'lock', sub: 'Last seen, photo, receipts, groups' },
-  { id: 'blocked', label: 'Blocked contacts', icon: 'ban', sub: 'Manage people you blocked' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Messages, calls, quiet hours' },
-  { id: 'appearance', label: 'Chats & appearance', icon: 'palette', sub: 'Theme, font size, wallpaper, language' },
-  { id: 'folders', label: 'Chat folders', icon: 'folder', sub: 'Organise your chats' },
-  { id: 'starred', label: 'Starred messages', icon: 'star', sub: 'Messages you saved' },
-  { id: 'storage', label: 'Storage & data', icon: 'disk', sub: 'Usage and media auto-download' },
-  { id: 'devices', label: 'Linked devices', icon: 'laptop', sub: 'Phones, tablets and computers' },
-  { id: 'backup', label: 'Backup & recovery', icon: 'cloud', sub: 'Export your data' },
-  { id: 'help', label: 'Help & support', icon: 'help', sub: 'FAQs, contact, report a problem' },
-  { id: 'legal', label: 'Terms & privacy policy', icon: 'doc', sub: 'How Wazzupp handles your data' },
-];
 
 export async function saveSettings(patch: Record<string, any>) {
   const me = getState().me!;
@@ -44,17 +28,6 @@ export async function saveSettings(patch: Record<string, any>) {
       try { const r = await api.patch('/api/me/settings', { baseVersion: cur.version, patch }); setState((s) => ({ me: { ...s.me!, settings: r.settings, settingsVersion: r.version } })); } catch (e2) { toastError(e2); await refreshMe(); }
     } else { toastError(e); await refreshMe(); }
   }
-}
-
-export function SettingsMenu() {
-  const me = useStore((s) => s.me!); const route = useRoute(); const layout = useLayout();
-  return (
-    <PaneFrame title="Settings">
-      <button className="profile-card" onClick={() => go('settings/profile')}><Avatar id={me.id} name={me.displayName} mediaId={me.avatarMediaId} size={64} /><span className="grow" style={{ textAlign: 'left' }}><b>{me.displayName}</b><small className="muted truncate" style={{ display: 'block' }}>{me.statusText}</small></span><Icon name="right" size={18} className="muted" /></button>
-      <ul className="conv-list">{SECTIONS.map((s) => <li key={s.id}><button className={`conv-row set-menu ${route.tab === 'settings' && route.id === s.id && layout !== 'mobile' ? 'sel' : ''}`} onClick={() => go(`settings/${s.id}`)}><span className="set-ico"><Icon name={s.icon} size={20} /></span><span className="conv-main"><span className="conv-name">{s.label}</span><span className="conv-prev">{s.sub}</span></span></button></li>)}
-        <li><button className="conv-row set-menu" onClick={() => logout()}><span className="set-ico danger"><Icon name="logout" size={20} /></span><span className="conv-main"><span className="conv-name" style={{ color: 'var(--danger)' }}>Sign out</span></span></button></li></ul>
-    </PaneFrame>
-  );
 }
 
 function Page({ title, children }: { title: string; children: React.ReactNode }) {
@@ -77,10 +50,15 @@ export function SettingsPage({ section }: { section?: string }) {
     case 'appearance': return <AppearancePage />;
     case 'folders': return <FoldersPage />;
     case 'starred': return <StarredPage />;
+    case 'status-privacy': return <StatusPrivacyPage />;
+    case 'events': return <EventsPage />;
+    case 'chats': return <ChatsPage />;
+    case 'accessibility': return <AccessibilityPage />;
+    case 'language': return <LanguagePage />;
     case 'storage': return <StoragePage />;
     case 'devices': return <DevicesPage />;
     case 'backup': return <BackupPage />;
-    case 'help': return <HelpPage />;
+    case 'help': return <HelpFeedbackPage />;
     case 'legal': return <LegalPage />;
     default: return <div className="conv-empty"><div className="empty"><div className="empty-art"><Icon name="settings" size={38} stroke={1.6} /></div><h3>Settings</h3><p>Choose a category on the left.</p></div></div>;
   }
@@ -247,12 +225,6 @@ function FoldersPage() {
     <form className="row" onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) return; await guard(api.post('/api/folders', { name: name.trim() })); setName(''); await loadFolders(); }}><input className="input" placeholder="New folder (e.g. Work)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /><button className="btn btn-primary">Add</button></form></div></Page>;
 }
 
-function StarredPage() {
-  const [list, setList] = useState<Msg[] | null>(null); const convs = useStore((s) => s.convs);
-  useEffect(() => { api.get('/api/starred').then((r) => setList(r.messages)).catch(() => setList([])); }, []);
-  return <Page title="Starred messages"><div className="form-narrow">{!list ? <div className="spinner" /> : list.length ? <ul className="stack-sm">{list.map((m) => <li key={m.id}><button className="starred" onClick={() => go(`chats/${m.conversationId}/m/${m.seq}`)}><small className="muted">{convs[m.conversationId] ? convTitle(convs[m.conversationId]) : 'Chat'} · {ago(m.createdAt)}</small><p>{m.body || m.kind}</p></button></li>)}</ul> : <p className="muted">Tap and hold a message, then choose Star to keep it here.</p>}</div></Page>;
-}
-
 function StoragePage() {
   const m = useStore((s) => s.me!.settings.media); const [u, setU] = useState<any>(null);
   useEffect(() => { api.get('/api/storage/usage').then(setU).catch(() => {}); }, []);
@@ -289,10 +261,6 @@ function BackupPage() {
     <Section title="Your data"><Row icon="download" title="Export my data" sub="Download your profile, contacts and the messages you sent as JSON" onClick={async () => { try { const r = await fetch('/api/me/export', { headers: { authorization: `Bearer ${(await import('../lib/api.ts')).getToken()}` } }); const b = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'wazzupp-export.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); } catch (e) { toastError(e); } }} /></Section>
     <Section title="How your messages are kept"><div className="set-row col muted"><p>Your messages live on the Wazzupp server and sync to every signed-in device. There is no separate device backup to restore: sign in on a new device and your history appears.</p><p>End-to-end encrypted backups are part of the planned E2EE milestone (see docs/SECURITY.md).</p></div></Section>
   </div></Page>;
-}
-function HelpPage() {
-  return <Page title="Help & support"><div className="form-narrow"><Section title="Common questions">
-    {[['How do I verify my account?', 'Enter the 6-digit code sent to your email or phone when you register. You can request another code from the verification screen.'], ['Can I use Wazzupp on several devices?', 'Yes. Sign in with the same account on each device; chats, read state and settings stay in sync. Manage devices under Linked devices.'], ['How do disappearing messages work?', 'Open a chat, tap its name, then Disappearing messages. New messages vanish after 24 hours, 7 days or 90 days.'], ['Are my messages end-to-end encrypted?', 'Not yet. They are encrypted in transit and access-controlled on the server. End-to-end encryption is a planned milestone and will be announced only once it is audited.'], ['How do I report abuse?', 'Press and hold a message, choose Report. Only the reported message is shared with moderators.']].map(([q, a]) => <details key={q} className="faq"><summary>{q}</summary><p>{a}</p></details>)}</Section></div></Page>;
 }
 function LegalPage() {
   return <Page title="Terms & privacy policy"><div className="form-narrow legal">

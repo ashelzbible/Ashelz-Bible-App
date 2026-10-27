@@ -8,8 +8,8 @@ Test evidence at the time of writing (all run in this repository):
 |---|---|---|
 | Type check (server + web) | `npm run typecheck` | clean |
 | Lint | `npm run lint` | 0 errors |
-| API / integration / realtime / security | `npm test` | **96 / 96 pass** (real PostgreSQL, real HTTP + WebSocket) |
-| Browser end-to-end | `npm run e2e` | **11 / 11 pass** (two real Chromium instances, fake camera/mic) |
+| API / integration / realtime / security | `npm test` | **105 / 105 pass** (real PostgreSQL, real HTTP + WebSocket) |
+| Browser end-to-end | `npm run e2e` | **14 / 14 pass** (two real Chromium instances, fake camera/mic) |
 
 ## Phase 1: foundation
 - [x] Repository inspected; the existing Bible app is untouched (Wazzupp lives in `wazzupp/`; no root file changed, including the integrity-hashed README)
@@ -64,3 +64,18 @@ Test evidence at the time of writing (all run in this repository):
 - Single-region, single-database design; receipts in very large groups are not throttled.
 - Presence for users beyond 1000 direct-chat peers is truncated.
 - Email/SMS delivery needs your SMTP/SMS provider; without SMTP codes only reach the `outbox` table (and the dev-only helper).
+
+
+## Phone, tablet and desktop parity pass (latest)
+- [x] Desktop and iPad share one light layout: icon rail, "Chats" list with search and filter, conversation, welcome pane. Phones keep the four-tab layout.
+- [x] Chat: status-reply cards, corner reactions, WhatsApp-style formatting (`*bold*`, `_italic_`, `~strike~`, `` `code` ``, ``` blocks, lists, quotes), pill composer, attach grid, emoji / GIF / sticker panel, video notes, native system font stack.
+- [x] Calls log, scheduled calls, communities and updates screens, in-app camera.
+- [x] Status editor: filters, crop/rotate, stickers and shapes, text with fonts and highlight, drawing with pen styles and colour slider, voice and text statuses, per-status audience, music from your own library.
+- [x] Settings home (mood, QR, profile link), status privacy (with excluded/included lists and Allow sharing), starred, events, chats, accessibility, language, help and feedback, invite, app updates.
+
+### Deliberately not built (and why)
+- Ad preferences, Subscriptions, Parental controls, Accounts Centre, "Also from Meta", Facebook/Instagram story sharing: they belong to Meta's products and have no honest equivalent here.
+- A built-in music catalogue and the "Cuppy" sticker packs are licensed content. Music comes from songs you add yourself; stickers are emoji stickers and ones you create.
+- GIF search needs a Tenor API key (`TENOR_API_KEY`); without it the GIF tab says so.
+- "Question" and "Add yours" status stickers are static labels; viewers answer by replying to the status.
+- AI images are not offered.

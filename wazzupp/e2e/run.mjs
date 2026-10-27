@@ -221,6 +221,34 @@ describe('browser end to end', () => {
     assert.doesNotMatch(await a.page.getByLabel('Message', { exact: true }).inputValue(), /😀/);
   });
 
+  it('settings home, mood, QR, status privacy, and posting a status from the camera editor', async () => {
+    await a.page.evaluate(() => { location.hash = '#/settings'; });
+    for (const n of ['Linked devices', 'Account', 'Privacy', 'Lists', 'Chats', 'Appearance', 'Broadcasts', 'Events', 'Notifications', 'Storage and data', 'Accessibility', 'App language', 'Help and feedback', 'Invite a friend', 'App updates']) await a.page.locator('.set-menu', { hasText: n }).first().waitFor();
+    await a.page.getByLabel('Edit current mood').click(); await a.page.getByLabel(/on your mind/).fill('Feeling grateful'); await a.page.getByRole('button', { name: 'Save' }).click();
+    await a.page.getByLabel('Edit current mood').getByText('Feeling grateful').waitFor();
+    await a.page.getByLabel('My QR code').click(); await a.page.locator('.qr svg').waitFor(); await a.page.keyboard.press('Escape');
+    await a.page.evaluate(() => { location.hash = '#/settings/status-privacy'; });
+    await a.page.getByRole('radio', { name: /Only share with/ }).waitFor();
+    await a.page.getByRole('radio', { name: /My contacts except/ }).click();
+    await a.page.getByRole('switch', { name: 'Allow sharing' }).click();
+    assert.equal(await a.page.getByRole('switch', { name: 'Allow sharing' }).getAttribute('aria-checked'), 'false');
+    await a.page.getByRole('switch', { name: 'Allow sharing' }).click();
+    await a.page.getByRole('radio', { name: /^My contacts$/ }).click();
+    // post a photo status through the editor
+    await a.page.evaluate(() => { location.hash = '#/status/new/camera'; });
+    await a.page.getByLabel('Take photo').click(); await a.page.getByRole('button', { name: /Use photo/ }).click();
+    await a.page.getByLabel('Caption').fill('From the editor');
+    await a.page.getByRole('button', { name: /Filters/ }).click(); await a.page.getByRole('button', { name: 'B&W' }).click();
+    await a.page.getByLabel('Post status').click();
+    await a.page.getByText('Status posted').waitFor();
+    await a.page.evaluate(() => { location.hash = '#/status'; });
+    await a.page.getByText(/Today|Just now|\d{2}:\d{2}/).first().waitFor();
+    // text status with a different font and colour
+    await a.page.evaluate(() => { location.hash = '#/status'; });
+    await a.page.getByLabel('Write a text status').click(); await a.page.getByLabel('Status text').fill('Hello from a text status');
+    await a.page.getByLabel('Change font').click(); await a.page.getByLabel('Post status').click(); await a.page.getByText('Status posted').waitFor();
+  });
+
   it('has no horizontal overflow or clipped layout at phone, tablet and desktop sizes', async () => {
     for (const [w, h] of [[360, 740], [390, 844], [768, 1024], [820, 1180], [1180, 820], [1440, 900], [1920, 1080]]) {
       await a.page.setViewportSize({ width: w, height: h });

@@ -114,7 +114,7 @@ function seed() {
 seed();
 
 // statuses
-interface St { id: string; userId: string; kind: 'text' | 'image'; body: string; caption: string; background: string | null; mediaId: string | null; createdAt: number; viewed: boolean; reaction: string | null; viewers: J[] }
+interface St { font?: number; audioMediaId?: string | null; audioTitle?: string; id: string; userId: string; kind: 'text' | 'image' | 'video' | 'voice'; body: string; caption: string; background: string | null; mediaId: string | null; createdAt: number; viewed: boolean; reaction: string | null; viewers: J[] }
 const statuses: St[] = [
   { id: uid(), userId: 'u-sarah', kind: 'image', body: '', caption: '', background: null, mediaId: addMedia(scene('sunset', 1080, 1920, 'Good Vibes Only'), 'image', 'status.jpg', { width: 1080, height: 1920 }).id, createdAt: Date.now() - 120000, viewed: false, reaction: null, viewers: [] },
   { id: uid(), userId: 'u-david', kind: 'text', body: 'Coffee first, everything else second ☕', caption: '', background: '#6A3A8C', mediaId: null, createdAt: Date.now() - 12 * MIN, viewed: false, reaction: null, viewers: [] },
@@ -290,7 +290,7 @@ route('PUT', '/api/messages/:id/star', ({ m, body }) => { const [c, x] = getMsg(
 route('PUT', '/api/messages/:id/pin', ({ m, body }) => { const [c, x] = getMsg(m[1]); x.pinned = !!body.pinned; emit('message.update', { message: msgView(c, x) }); return { message: msgView(c, x) }; });
 route('POST', '/api/messages/:id/vote', ({ m, body }) => { const [c, x] = getMsg(m[1]); x.votes = (x.votes ?? []).filter((v: J) => v.userId !== ME).concat(body.options.map((o: number) => ({ userId: ME, option: o }))); emit('poll.votes', { conversationId: c.id, messageId: x.id, votes: x.votes }); return { votes: x.votes }; });
 route('POST', '/api/messages/:id/forward', ({ m, body }) => { const [, x] = getMsg(m[1]); const out = body.conversationIds.map((cid: string) => { const c = getConv(cid); const nm = msg(c, ME, x.kind, x.body, 0, { meta: x.meta, media: x.media, forwarded: true }); deliverMessage(c, nm); return msgView(c, nm); }); return { messages: out }; });
-route('GET', '/api/starred', () => ({ messages: [...convs.values()].flatMap((c) => c.msgs.filter((x) => x.starred && !x.deleted).map((x) => msgView(c, x))) }));
+route('GET', '/api/starred', () => ({ messages: [...convs.values()].flatMap((c) => c.msgs.filter((x) => x.starred && !x.deleted).map((x) => ({ ...msgView(c, x), senderName: x.sender === ME ? 'You' : P(x.sender ?? '')?.displayName ?? 'Someone', chat: { kind: c.kind, title: c.title ?? P(c.peer ?? '')?.displayName ?? 'Chat' } }))) }));
 
 route('GET', '/api/contacts', () => ({ contacts: [...contacts].map((id) => ({ id, username: P(id).username, displayName: P(id).displayName, alias: null, favorite: false, avatarMediaId: null, statusText: P(id).statusText })) }));
 route('PUT', '/api/contacts/:id', ({ m }) => { contacts.add(m[1]); return { ok: true }; });
@@ -331,12 +331,12 @@ route('GET', '/api/status', () => {
   for (const s of statuses.filter((x) => x.userId !== ME)) {
     const p = P(s.userId); let g = groups.get(s.userId);
     if (!g) groups.set(s.userId, (g = { userId: p.id, username: p.username, displayName: p.displayName, avatarMediaId: null, muted: mutedStatus.has(p.id), allViewed: true, latestAt: iso(s.createdAt), items: [] }));
-    g.items.push({ id: s.id, kind: s.kind, body: s.body, caption: s.caption, background: s.background, mediaId: s.mediaId, createdAt: iso(s.createdAt), expiresAt: iso(s.createdAt + 86400000), viewed: s.viewed, reaction: s.reaction }); if (!s.viewed) g.allViewed = false; g.latestAt = iso(s.createdAt);
+    g.items.push({ id: s.id, kind: s.kind, body: s.body, caption: s.caption, background: s.background, font: s.font ?? 0, audioMediaId: s.audioMediaId ?? null, audioTitle: s.audioTitle ?? '', allowSharing: true, mediaId: s.mediaId, createdAt: iso(s.createdAt), expiresAt: iso(s.createdAt + 86400000), viewed: s.viewed, reaction: s.reaction }); if (!s.viewed) g.allViewed = false; g.latestAt = iso(s.createdAt);
   }
   return { feed: [...groups.values()].sort((a, b) => +a.allViewed - +b.allViewed || +new Date(b.latestAt) - +new Date(a.latestAt)) };
 });
-route('GET', '/api/status/mine', () => ({ items: statuses.filter((s) => s.userId === ME).map((s) => ({ id: s.id, kind: s.kind, body: s.body, caption: s.caption, background: s.background, mediaId: s.mediaId, createdAt: iso(s.createdAt), expiresAt: iso(s.createdAt + 86400000), audience: 'contacts', viewers: s.viewers })) }));
-route('POST', '/api/status', ({ body }) => { const s: St = { id: uid(), userId: ME, kind: body.kind, body: body.body ?? '', caption: body.caption ?? '', background: body.background ?? null, mediaId: body.mediaId ?? null, createdAt: Date.now(), viewed: true, reaction: null, viewers: [] }; statuses.push(s); later(2500, () => { s.viewers.push({ userId: 'u-sarah', displayName: 'Sarah Johnson', viewedAt: iso(Date.now()), reaction: '❤️' }); emit('status.viewed', {}); }); return [201, { id: s.id }]; });
+route('GET', '/api/status/mine', () => ({ items: statuses.filter((s) => s.userId === ME).map((s) => ({ id: s.id, kind: s.kind, body: s.body, caption: s.caption, background: s.background, font: s.font ?? 0, audioMediaId: s.audioMediaId ?? null, audioTitle: s.audioTitle ?? '', mediaId: s.mediaId, createdAt: iso(s.createdAt), expiresAt: iso(s.createdAt + 86400000), audience: 'contacts', viewers: s.viewers })) }));
+route('POST', '/api/status', ({ body }) => { const s: St = { id: uid(), userId: ME, kind: body.kind, body: body.body ?? '', caption: body.caption ?? '', background: body.background ?? null, font: body.font ?? 0, audioMediaId: body.audioMediaId ?? null, audioTitle: body.audioTitle ?? '', mediaId: body.mediaId ?? null, createdAt: Date.now(), viewed: true, reaction: null, viewers: [] }; statuses.push(s); later(2500, () => { s.viewers.push({ userId: 'u-sarah', displayName: 'Sarah Johnson', viewedAt: iso(Date.now()), reaction: '❤️' }); emit('status.viewed', {}); }); return [201, { id: s.id }]; });
 route('POST', '/api/status/:id/view', ({ m }) => { const s = statuses.find((x) => x.id === m[1]); if (s) s.viewed = true; });
 route('POST', '/api/status/:id/react', ({ m, body }) => { const s = statuses.find((x) => x.id === m[1]); if (s) s.reaction = body.emoji; });
 route('POST', '/api/status/:id/reply', ({ m, body }) => { const s = statuses.find((x) => x.id === m[1])!; const c = [...convs.values()].find((x) => x.peer === s.userId)!; const nm = msg(c, ME, 'text', body.body, 0, { meta: { statusReply: { ownerId: s.userId, kind: s.kind ?? 'text', text: (s.body || s.caption || 'Photo').slice(0, 80), mediaId: null } } }); deliverMessage(c, nm); simulateReply(c, nm); return { conversationId: c.id, message: msgView(c, nm) }; });
@@ -391,3 +391,18 @@ export function installDemoBackend() {
   }) as typeof fetch;
   (window as any).WebSocket = FakeWS;
 }
+
+
+// ---- additions: music library, GIF search (off), events, feedback, call log tools, scheduled calls, status forward ----
+const music: Array<{ id: string; mediaId: string; title: string; artist: string; mood: string; genre: string; starred: boolean; durationMs: number | null }> = [];
+route('GET', '/api/music', ({ q }) => { const t = String(q.get('q') ?? '').toLowerCase(); const tab = String(q.get('tab') ?? 'suggested'); return { tracks: music.filter((m) => (!t || (m.title + m.artist + m.mood + m.genre).toLowerCase().includes(t)) && (tab !== 'starred' || m.starred)), moods: ['Happy', 'Sad', 'Romantic', 'Calm', 'Energetic', 'Worship', 'Focus', 'Party'], genres: ['Pop', 'Hip-Hop/Rap', 'Soul/R&B', 'Gospel', 'Rock', 'Afro', 'Dance', 'Classical', 'Jazz', 'Other'] }; });
+route('POST', '/api/music', ({ body }) => { const id = uid(); music.unshift({ id, mediaId: body.mediaId, title: body.title, artist: body.artist ?? '', mood: body.mood ?? '', genre: body.genre ?? '', starred: false, durationMs: null }); return [201, { id }]; });
+route('PATCH', '/api/music/:id', ({ m, body }) => { const t = music.find((x) => x.id === m[1]); if (t) Object.assign(t, body); return [204, null]; });
+route('DELETE', '/api/music/:id', ({ m }) => { const i = music.findIndex((x) => x.id === m[1]); if (i >= 0) music.splice(i, 1); return [204, null]; });
+route('GET', '/api/gifs', () => ({ configured: false, results: [], next: null }));
+route('GET', '/api/events', () => ({ events: [...convs.values()].flatMap((c) => c.msgs.filter((x) => x.kind === 'event' && !x.deleted).map((x) => ({ ...msgView(c, x), chat: { id: c.id, title: c.title ?? P(c.peer ?? '')?.displayName ?? 'Chat' } }))) }));
+route('POST', '/api/feedback', () => [201, { ok: true }]);
+route('DELETE', '/api/calls', () => { calls.length = 0; return [204, null]; });
+route('GET', '/api/calls/scheduled', () => ({ scheduled: [] }));
+route('POST', '/api/calls/scheduled', () => { throw new Err(503, 'demo_no_calls', 'Scheduling calls needs a real server'); });
+route('POST', '/api/status/:id/forward', () => { throw new Err(503, 'demo_unavailable', 'Forwarding statuses needs a real server'); });
