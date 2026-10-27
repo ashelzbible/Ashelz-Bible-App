@@ -1,0 +1,5 @@
+#root { display: flex; flex-direction: column; }
+.demo-ribbon { flex: none; background: #052E2B; color: #D9FBEA; font-size: 12px; line-height: 1.3; padding: 6px 14px; display: flex; gap: 10px; align-items: center; justify-content: center; text-align: center; z-index: 5; }
+.demo-ribbon b { color: #25D9A0; white-space: nowrap; }
+.app { height: auto; flex: 1; min-height: 0; }
+@media (max-width: 699px) { .demo-ribbon span { display: none; } .demo-ribbon::after { content: 'Resets on reload. Calls need the real server.'; } }

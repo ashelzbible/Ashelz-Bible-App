@@ -1,5 +1,6 @@
 node_modules/
 data/
 web/dist/
+web/dist-demo/
 *.log
 .env

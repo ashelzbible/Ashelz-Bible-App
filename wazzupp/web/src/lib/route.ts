@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { backHash, getHash, replaceHash, setHash, subscribeHash } from './nav.ts';
 
 export interface Route { tab: 'chats' | 'calls' | 'communities' | 'status' | 'settings' | 'admin'; id?: string; sub?: string; rest?: string }
 
@@ -7,13 +8,13 @@ export function parseRoute(hash: string): Route {
   const tab = (['chats', 'calls', 'communities', 'status', 'settings', 'admin'].includes(parts[0]) ? parts[0] : 'chats') as Route['tab'];
   return { tab, id: parts[1], sub: parts[2], rest: parts.slice(3).join('/') };
 }
-const subscribe = (cb: () => void) => { window.addEventListener('hashchange', cb); return () => window.removeEventListener('hashchange', cb); };
+const subscribe = subscribeHash;
 let cached: { hash: string; route: Route } = { hash: '\0', route: { tab: 'chats' } };
-const snap = () => { if (cached.hash !== location.hash) cached = { hash: location.hash, route: parseRoute(location.hash) }; return cached.route; };
+const snap = () => { const h = getHash(); if (cached.hash !== h) cached = { hash: h, route: parseRoute(h) }; return cached.route; };
 export const useRoute = (): Route => useSyncExternalStore(subscribe, snap, snap);
-export const go = (path: string) => { const h = '#/' + path.replace(/^#?\/?/, ''); if (location.hash !== h) location.hash = h; };
-export const replace = (path: string) => { history.replaceState(null, '', '#/' + path.replace(/^#?\/?/, '')); window.dispatchEvent(new HashChangeEvent('hashchange')); };
-export const back = () => history.back();
+export const go = (path: string) => setHash('#/' + path.replace(/^#?\/?/, ''));
+export const replace = (path: string) => replaceHash('#/' + path.replace(/^#?\/?/, ''));
+export const back = () => backHash();
 
 export type Layout = 'mobile' | 'tablet' | 'desktop';
 const q = (px: number) => window.matchMedia(`(min-width: ${px}px)`);

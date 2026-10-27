@@ -3,6 +3,7 @@ import { api } from '../lib/api.ts';
 import { clock, convTitle, dayLabel, lastSeenLabel } from '../lib/format.ts';
 import { QUICK_REACTIONS } from '../lib/emoji.ts';
 import { back, go, useLayout, useWide } from '../lib/route.ts';
+import { getHash } from '../lib/nav.ts';
 import { getState, toast, useStore } from '../lib/store.ts';
 import type { Conv, Member, Msg } from '../lib/types.ts';
 import { discardLocal, guard, loadMessages, markRead, patchState, retryMessage, refreshConversation } from '../lib/actions.ts';
@@ -57,7 +58,7 @@ export function Conversation({ id, jumpSeq }: { id: string; jumpSeq?: number }) 
   const stick = useRef(true);
   const prevHeight = useRef(0);
 
-  const route = location.hash.split('/');
+  const route = getHash().split('/');
   const infoRoute = route[3] === 'info';
   useEffect(() => { setShowInfo(infoRoute || (wide && layout === 'desktop' && localStorage.getItem('wz.info') !== '0')); }, [infoRoute, wide, layout, id]);
 

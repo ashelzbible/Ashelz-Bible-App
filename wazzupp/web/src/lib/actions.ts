@@ -3,6 +3,7 @@ import { getState, resetState, setState, sortConvs, toast } from './store.ts';
 import type { CallHistory, Conv, Me, Msg } from './types.ts';
 import { applyAppearance } from './theme.ts';
 import { realtime } from './realtime.ts';
+import { getHash, setHash } from './nav.ts';
 
 const LS = { token: 'wz.token', event: 'wz.lastEvent', outbox: 'wz.outbox' };
 const ls = {
@@ -52,7 +53,7 @@ function deviceName() {
 export async function logout(callServer = true) {
   if (callServer) { try { await api.post('/api/auth/logout'); } catch { /* already invalid */ } }
   realtime.stop(); setToken(null); ls.del(LS.token); ls.del(LS.event); ls.del(LS.outbox);
-  resetState(); location.hash = '#/chats';
+  resetState(); setHash('#/chats');
 }
 
 export async function refreshMe() { const { user } = await api.get<{ user: Me }>('/api/me'); setState({ me: user }); applyAppearance(user.settings.appearance); return user; }
@@ -214,7 +215,7 @@ export function applyMessage(m: Msg) {
     if (t) msgs = { ...s.msgs, [m.conversationId]: { ...t, list: mergeList(t.list, [{ ...m, status: mine ? (m.status ?? 'sent') : undefined }]) } };
     const c = s.convs[m.conversationId];
     if (!c) return { msgs };
-    const open = location.hash.includes(`/chats/${m.conversationId}`) && s.focused;
+    const open = getHash().includes(`/chats/${m.conversationId}`) && s.focused;
     const incoming = !mine && m.kind !== 'system';
     const already = c.lastMessage?.id === m.id;
     const upd: Conv = {
@@ -226,7 +227,7 @@ export function applyMessage(m: Msg) {
     return { msgs, convs, convOrder: sortConvs(convs) };
   });
   const c = getState().convs[m.conversationId];
-  if (c && m.senderId !== getState().me?.id && location.hash.includes(`/chats/${m.conversationId}`) && getState().focused) markRead(m.conversationId);
+  if (c && m.senderId !== getState().me?.id && getHash().includes(`/chats/${m.conversationId}`) && getState().focused) markRead(m.conversationId);
   if (!getState().convs[m.conversationId]) void refreshConversation(m.conversationId);
 }
 function patchMessage(convId: string, id: string, fn: (m: Msg) => Msg) {
