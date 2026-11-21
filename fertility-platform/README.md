@@ -34,12 +34,30 @@ All three modules are pure (no I/O, clock or randomness) and never impute missin
 | Module | Rule implemented |
 |---|---|
 | `bbt_analyzer` | 3-over-6: six calendar-consecutive valid baseline readings; coverline = their max; next three consecutive readings all above it; third ≥ coverline + 0.20 °C. Excludes fever (> 37.8 °C), flagged sleep disruption, implausible values and ambiguous duplicate dates. Compared in integer hundredths of a degree, so "≥ 0.20" is exact. |
-| `hormone_analyzer` | Baseline = mean of a cycle's first 5 readings per analyte. E3G ≥ 1.5 × baseline → rise. LH ≥ 2.5 × baseline **or** ≥ 25 mIU/mL → surge (absolute rule needs no baseline). LH peak = highest value in the first surge episode. PdG ≥ 5.0 µg/mL on 3 consecutive days after the peak → ovulation confirmed. Exact rational arithmetic (`Fraction`), no float drift. |
+| `hormone_analyzer` | Thresholds come from a versioned **assay profile** (`core/profiles.py`); the default holds the values below. Baseline = mean of a cycle's first 5 readings per analyte. E3G ≥ 1.5 × baseline → rise. LH ≥ 2.5 × baseline **or** ≥ 25 mIU/mL → surge (absolute rule needs no baseline). LH peak = highest value in the first surge episode. PdG ≥ 5.0 µg/mL on 3 consecutive days after the peak → ovulation confirmed. Exact rational arithmetic (`Fraction`), no float drift. |
 | `cycle_synthesizer` | Daily status `LOW / HIGH / PEAK / OVULATION_CONFIRMED / INSUFFICIENT_DATA` with machine-readable flags and plain-language reasoning. Each day sees only data dated ≤ that day, so **issued history never changes when later data arrives**. |
 
 Status rules: confirmed (PdG or BBT) ▸ PEAK (LH surge today or yesterday; or egg-white mucus + E3G rise) ▸
 HIGH (E3G rise or watery/egg-white mucus) ▸ LOW (mucus or a judgeable E3G reading, no trigger) ▸
 INSUFFICIENT_DATA. A temperature alone never yields LOW before a confirmed shift.
+
+### Evidence status of the thresholds
+
+Checked against published sources (full texts read where noted; several papers could not be opened).
+
+| Rule | Status |
+|---|---|
+| PdG ≥ 5.0 µg/mL on 3 consecutive first-morning days after the LH surge | **Pilot-level support.** Bouchard 2019 (read in full): 3 consecutive positives at 5 µg/mL, counted from the second Peak LH reading; 82% of 17 cycles positive (7 µg/mL: 59%); 34 cycles, 13 women, LH-surge reference, not ultrasound. The "100% specificity" figure is attributed to Ecochard 2013, which could not be opened and is **unverified**. |
+| BBT 3-over-6, third reading ≥ 0.20 °C above the coverline | **0.20 °C is consistent with the one paper read** (Shilaih 2018: ≥ 0.2 °C above at least 5 of the preceding 6 days, 3 consecutive days) — but that paper used wrist *skin* temperature and compares against each of the six days, not against their maximum, so the coverline form here is a variant. The originator of the rule was not verified. A "0.3 °C" figure seen in one search summary was **not** found in the text. |
+| E3G ≥ 1.5× baseline; LH ≥ 2.5× baseline; LH ≥ 25 mIU/mL | **No published source found.** A small case report (8 women) used *absolute* Mira cut-offs (E3G > 100 ng/mL; LH 11 mIU/mL, itself cited to a paper not read). Absolute values are device/assay-specific. These three numbers come from the product specification only. |
+| Anovulation / PCOS hints | Not implemented. The 2023 international PCOS guideline (Teede et al.) keeps the Rotterdam criteria; AMH has no single cut-off across assays. |
+
+Because of this, thresholds are **not hard-coded**: each prediction is computed under a named `AssayProfile`
+and stored with the version `biochem-<engine>+<profile>` (e.g. `biochem-1.0.0+spec-provisional-1`).
+The only registered profile is `spec-provisional-1` (the specification values, labelled provisional in its
+`evidence` field). Add a device-specific profile only after its thresholds are verified against a source; the
+`/v1/analyze` request accepts `"profile"`, and an unknown name is rejected. The gateway worker currently always
+uses the default profile (selecting a profile per user or device is not wired yet).
 
 Design decisions you may want to review clinically:
 * "Consecutive" means calendar-consecutive. A fever/disrupted day inside the 6-day baseline blocks that

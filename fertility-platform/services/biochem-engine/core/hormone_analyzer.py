@@ -1,13 +1,14 @@
 """Urinary hormone (E3G / LH / PdG) threshold analysis.
 
-Pure and deterministic. Thresholds (fixed by the clinical specification):
+Pure and deterministic. Thresholds come from an AssayProfile (core.profiles);
+the default profile holds the specification values:
   * high fertility : E3G >= 1.5 x follicular baseline        (>= 50 % rise)
   * peak fertility : LH  >= 2.5 x follicular baseline  OR  LH >= 25 mIU/mL
   * ovulation      : PdG >= 5.0 ug/mL on 3 consecutive calendar days after
                      the LH peak day
 
 The follicular baseline of an analyte is the mean of its first
-BASELINE_READINGS valid readings; those readings are never themselves
+`baseline_readings` valid readings; those readings are never themselves
 evaluated against the baseline. Missing values are never imputed.
 """
 
@@ -19,15 +20,11 @@ from datetime import date, timedelta
 from enum import Enum
 from fractions import Fraction
 
-# Thresholds are exact rationals and readings are converted from their
-# shortest decimal representation, so comparisons such as ">= 1.5 x baseline"
-# carry no binary floating-point error.
-BASELINE_READINGS = 5
-E3G_RISE_FACTOR = Fraction(3, 2)
-LH_SURGE_FACTOR = Fraction(5, 2)
-LH_SURGE_ABSOLUTE_MIU_ML = Fraction(25)
-PDG_CONFIRM_UG_ML = Fraction(5)
-PDG_CONFIRM_DAYS = 3
+from .profiles import DEFAULT_PROFILE, AssayProfile
+
+# Readings are converted from their shortest decimal representation to exact
+# rationals (as are the profile thresholds), so comparisons such as
+# ">= 1.5 x baseline" carry no binary floating-point error.
 
 
 class Analyte(str, Enum):
@@ -78,13 +75,13 @@ def _series(readings: list[HormoneReading], analyte: Analyte) -> tuple[dict[date
     return out, excluded
 
 
-def _baseline(series: dict[date, Fraction]) -> tuple[Fraction | None, list[date]]:
-    """Mean of the first BASELINE_READINGS values; None unless positive."""
+def _baseline(series: dict[date, Fraction], n: int) -> tuple[Fraction | None, list[date]]:
+    """Mean of the first n values; None unless there are n and the mean is positive."""
     days = sorted(series)
-    if len(days) < BASELINE_READINGS:
+    if len(days) < n:
         return None, []
-    window = days[:BASELINE_READINGS]
-    mean = sum((series[d] for d in window), Fraction(0)) / BASELINE_READINGS
+    window = days[:n]
+    mean = sum((series[d] for d in window), Fraction(0)) / n
     return (mean if mean > 0 else None), window
 
 
@@ -101,13 +98,13 @@ def _consecutive_run(days: list[date], length: int) -> list[date] | None:
     return None
 
 
-def analyze_hormones(readings: list[HormoneReading]) -> HormoneResult:
+def analyze_hormones(readings: list[HormoneReading], profile: AssayProfile = DEFAULT_PROFILE) -> HormoneResult:
     e3g, ex_e3g = _series(readings, Analyte.E3G)
     lh, ex_lh = _series(readings, Analyte.LH)
     pdg, ex_pdg = _series(readings, Analyte.PDG)
 
-    e3g_base, e3g_window = _baseline(e3g)
-    lh_base, lh_window = _baseline(lh)
+    e3g_base, e3g_window = _baseline(e3g, profile.baseline_readings)
+    lh_base, lh_window = _baseline(lh, profile.baseline_readings)
 
     insufficient: list[Analyte] = []
     if e3g_base is None:
@@ -117,7 +114,7 @@ def analyze_hormones(readings: list[HormoneReading]) -> HormoneResult:
 
     e3g_days = tuple(
         d for d in sorted(e3g)
-        if e3g_base is not None and d not in e3g_window and e3g[d] >= E3G_RISE_FACTOR * e3g_base
+        if e3g_base is not None and d not in e3g_window and e3g[d] >= profile.e3g_rise_factor * e3g_base
     )
 
     # The absolute LH criterion needs no baseline, so it applies to every
@@ -125,8 +122,8 @@ def analyze_hormones(readings: list[HormoneReading]) -> HormoneResult:
     # to readings outside the baseline window.
     lh_days = tuple(
         d for d in sorted(lh)
-        if lh[d] >= LH_SURGE_ABSOLUTE_MIU_ML
-        or (lh_base is not None and d not in lh_window and lh[d] >= LH_SURGE_FACTOR * lh_base)
+        if lh[d] >= profile.lh_surge_absolute
+        or (lh_base is not None and d not in lh_window and lh[d] >= profile.lh_surge_factor * lh_base)
     )
 
     # LH peak: highest value within the first surge episode (consecutive
@@ -139,8 +136,8 @@ def analyze_hormones(readings: list[HormoneReading]) -> HormoneResult:
     confirmed: date | None = None
     run: list[date] = []
     if peak is not None:
-        after = [d for d in sorted(pdg) if d > peak and pdg[d] >= PDG_CONFIRM_UG_ML]
-        found = _consecutive_run(after, PDG_CONFIRM_DAYS)
+        after = [d for d in sorted(pdg) if d > peak and pdg[d] >= profile.pdg_confirm]
+        found = _consecutive_run(after, profile.pdg_days)
         if found:
             run = found
             confirmed = found[-1]

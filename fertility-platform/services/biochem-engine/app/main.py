@@ -20,6 +20,7 @@ from core import ALGORITHM_VERSION
 from core.bbt_analyzer import BbtReading
 from core.cycle_synthesizer import MucusReading, analyze_cycle
 from core.hormone_analyzer import HormoneReading
+from core.profiles import DEFAULT_PROFILE, get_profile
 
 MAX_ITEMS = 400
 
@@ -47,6 +48,7 @@ class MucusIn(_Strict):
 
 
 class AnalyzeRequest(_Strict):
+    profile: str = DEFAULT_PROFILE.name
     bbt: list[BbtIn] = Field(default_factory=list, max_length=MAX_ITEMS)
     hormones: list[HormoneIn] = Field(default_factory=list, max_length=MAX_ITEMS)
     mucus: list[MucusIn] = Field(default_factory=list, max_length=MAX_ITEMS)
@@ -60,11 +62,17 @@ class DayOut(_Strict):
 
 
 class AnalyzeResponse(_Strict):
-    algorithm_version: str
+    algorithm_version: str  # engine version + profile, e.g. biochem-1.0.0+spec-provisional-1
+    profile: str
     input_hash: str
     ovulation_confirmed_on: date | None
     anovulatory_pattern_suspected: bool
     days: list[DayOut]
+
+
+def version_tag(profile_name: str) -> str:
+    """Algorithm version stored with every prediction; includes the thresholds profile."""
+    return f"{ALGORITHM_VERSION}+{profile_name}"
 
 
 def input_hash(req: AnalyzeRequest) -> str:
@@ -73,7 +81,7 @@ def input_hash(req: AnalyzeRequest) -> str:
         "bbt": sorted((r.model_dump(mode="json") for r in req.bbt), key=json.dumps),
         "hormones": sorted((r.model_dump(mode="json") for r in req.hormones), key=json.dumps),
         "mucus": sorted((r.model_dump(mode="json") for r in req.mucus), key=json.dumps),
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_version": version_tag(req.profile),
     }
     blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()
@@ -97,15 +105,18 @@ def create_app(engine_token: str | None = None) -> FastAPI:
     @app.post("/v1/analyze", response_model=AnalyzeResponse, dependencies=[Depends(require_token)])
     def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         try:
+            profile = get_profile(req.profile)
             result = analyze_cycle(
                 [BbtReading(r.day, r.temp_c, r.sleep_disrupted) for r in req.bbt],
                 [HormoneReading(r.day, r.lh_miu_ml, r.e3g_ng_ml, r.pdg_ug_ml) for r in req.hormones],
                 [MucusReading(r.day, r.score) for r in req.mucus],
+                profile,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return AnalyzeResponse(
-            algorithm_version=ALGORITHM_VERSION,
+            algorithm_version=version_tag(profile.name),
+            profile=profile.name,
             input_hash=input_hash(req),
             ovulation_confirmed_on=result.ovulation_confirmed_on,
             anovulatory_pattern_suspected=result.anovulatory_pattern_suspected,

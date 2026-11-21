@@ -25,6 +25,7 @@ from enum import Enum
 
 from .bbt_analyzer import BbtReading, BbtStatus, analyze_bbt
 from .hormone_analyzer import Analyte, HormoneReading, analyze_hormones
+from .profiles import DEFAULT_PROFILE, AssayProfile
 
 PEAK_DAYS_AFTER_SURGE = 1  # ovulation follows the LH surge by ~24-36 h
 ANOVULATORY_MIN_SPAN_DAYS = 35  # cycle-level flag only; never written onto past days
@@ -104,10 +105,11 @@ def _status_for_day(
     bbt: list[BbtReading],
     hormones: list[HormoneReading],
     mucus: list[MucusReading],
+    profile: AssayProfile,
 ) -> DayStatus:
     """Evaluate one day from data already restricted to dates <= day."""
     bbt_res = analyze_bbt(bbt)
-    horm = analyze_hormones(hormones)
+    horm = analyze_hormones(hormones, profile)
     mucus_valid, mucus_invalid = _valid_mucus(mucus)
 
     flags: list[Flag] = []
@@ -125,7 +127,7 @@ def _status_for_day(
     if unjudged:
         flags.append(Flag.HORMONE_BASELINE_INSUFFICIENT)
         names = "/".join(a.value for a in unjudged)
-        why.append(f"{names} follicular baseline not yet established (needs 5 readings).")
+        why.append(f"{names} follicular baseline not yet established (needs {profile.baseline_readings} readings).")
 
     # --- OVULATION_CONFIRMED -------------------------------------------------
     pdg_on = horm.ovulation_confirmed_day
@@ -134,7 +136,7 @@ def _status_for_day(
         if pdg_on is not None:
             flags.append(Flag.PDG_OVULATION_CONFIRMED)
             why.append(
-                f"PdG >= 5.0 ug/mL on 3 consecutive days after the LH peak ({horm.lh_peak_day}); "
+                f"PdG >= {float(profile.pdg_confirm):g} ug/mL on {profile.pdg_days} consecutive days after the LH peak ({horm.lh_peak_day}); "
                 f"confirmed on {pdg_on}."
             )
         if bbt_on is not None:
@@ -161,13 +163,13 @@ def _status_for_day(
 
     if surge_today:
         flags.append(Flag.LH_SURGE)
-        why.append("LH surge: >= 2.5x baseline or >= 25 mIU/mL.")
+        why.append(f"LH surge: >= {float(profile.lh_surge_factor):g}x baseline or >= {float(profile.lh_surge_absolute):g} mIU/mL.")
     elif surge_recent:
         flags.append(Flag.LH_SURGE_RECENT)
         why.append("Within 1 day after an LH surge; ovulation is imminent.")
     if e3g_today:
         flags.append(Flag.E3G_RISE)
-        why.append("E3G >= 50% above follicular baseline.")
+        why.append(f"E3G >= {float(profile.e3g_rise_factor):g}x follicular baseline.")
     if mucus_today is not None and mucus_today >= MUCUS_FERTILE_MIN:
         flags.append(Flag.MUCUS_FERTILE)
         why.append(f"Fertile-quality cervical mucus (score {mucus_today}).")
@@ -218,6 +220,7 @@ def analyze_cycle(
     bbt: list[BbtReading],
     hormones: list[HormoneReading],
     mucus: list[MucusReading],
+    profile: AssayProfile = DEFAULT_PROFILE,
 ) -> CycleAnalysis:
     """Produce one DayStatus per calendar day from the first to the last datum."""
     all_days = [r.day for r in bbt] + [r.day for r in hormones] + [r.day for r in mucus]
@@ -237,13 +240,14 @@ def analyze_cycle(
                 [r for r in bbt if r.day <= d],
                 [r for r in hormones if r.day <= d],
                 [r for r in mucus if r.day <= d],
+                profile,
             )
         )
 
     confirmed_on = next(
         (s.day for s in statuses if s.status is FertilityStatus.OVULATION_CONFIRMED), None
     )
-    final_horm = analyze_hormones(hormones)
+    final_horm = analyze_hormones(hormones, profile)
     final_bbt = analyze_bbt(bbt)
     anovulatory = (
         confirmed_on is None
