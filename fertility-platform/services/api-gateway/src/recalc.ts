@@ -72,6 +72,8 @@ export class RecalcWorker {
     private readonly pool: Pool,
     private readonly engine: EngineClient,
     private readonly log: { info: (o: object, m?: string) => void; error: (o: object, m?: string) => void } = { info() {}, error() {} },
+    /** Assay profile requested from the engine; the engine's default applies when undefined. */
+    private readonly profile?: string,
   ) {}
 
   /** Claim and process at most one job. Returns false when the queue is empty. */
@@ -145,6 +147,7 @@ export class RecalcWorker {
     const built = buildAnalyzeRequest(rows);
     if (!built) return;
 
+    if (this.profile !== undefined) built.request.profile = this.profile;
     const result = await this.engine.analyze(built.request);
 
     await withTx(this.pool, {}, async (c) => {

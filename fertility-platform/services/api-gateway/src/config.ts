@@ -35,6 +35,9 @@ const schema = z.object({
   ENGINE_URL: z.string().url().default('http://127.0.0.1:8000'),
   ENGINE_TOKEN: z.string().min(32, 'ENGINE_TOKEN must be at least 32 characters'),
 
+  /** Named assay profile the recalculation worker asks the engine to use (e.g. mira-marquette-2021-preliminary). */
+  ASSAY_PROFILE: z.string().regex(/^[a-z0-9._-]+$/i, 'ASSAY_PROFILE must be a profile name').default('spec-provisional-1'),
+
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(120),
 });
 
@@ -55,6 +58,7 @@ export interface Config {
   emailHashKey: Buffer;
   engineUrl: string;
   engineToken: string;
+  assayProfile: string;
   rateLimitPerMinute: number;
 }
 
@@ -98,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     emailHashKey: Buffer.from(e.EMAIL_HASH_KEY, 'hex'),
     engineUrl: e.ENGINE_URL,
     engineToken: e.ENGINE_TOKEN,
+    assayProfile: e.ASSAY_PROFILE,
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
   };
 }

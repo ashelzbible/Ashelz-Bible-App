@@ -1,6 +1,8 @@
 import type { PredictionDay } from '@fertility/sync-protocol';
 
 export interface AnalyzeRequest {
+  /** Assay profile (threshold set); the engine rejects unknown names. */
+  profile?: string;
   bbt: Array<{ day: string; temp_c: number; sleep_disrupted: boolean }>;
   hormones: Array<{ day: string; lh_miu_ml?: number; e3g_ng_ml?: number; pdg_ug_ml?: number }>;
   mucus: Array<{ day: string; score: number }>;

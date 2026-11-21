@@ -29,6 +29,12 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...TEST_ENV, EMAIL_HASH_KEY: TEST_ENV.FIELD_ENCRYPTION_KEY!.toUpperCase() })).toThrow(/one key per purpose/);
   });
 
+  it('defaults the assay profile and accepts a named one; rejects junk', () => {
+    expect(loadConfig(TEST_ENV).assayProfile).toBe('spec-provisional-1');
+    expect(loadConfig({ ...TEST_ENV, ASSAY_PROFILE: 'mira-marquette-2021-preliminary' }).assayProfile).toBe('mira-marquette-2021-preliminary');
+    expect(() => loadConfig({ ...TEST_ENV, ASSAY_PROFILE: 'x y; drop' })).toThrow(/ASSAY_PROFILE/);
+  });
+
   it('requires DATABASE_URL', () => {
     expect(() => loadConfig({ ...TEST_ENV, DATABASE_URL: undefined })).toThrow(/DATABASE_URL/);
   });

@@ -60,17 +60,35 @@ Open points the papers raise for the engine (none changed yet — each is a clin
 1. **`≥ 5.0` vs `> 5`.** Ecochard defines positivity as "above" the threshold. The engine uses ≥ (the product spec).
 2. **Where PdG counting starts.** Ecochard counts from a first positive LH kit or the end of fertile mucus. The
    engine counts days after the LH *peak*, which is later and so more conservative; a mucus-based start is not implemented.
-3. **LH peak = first surge episode.** Pattnaik reports multiple LH surges before the ovulating one in 39 of 55
-   ovulatory cycles, and defines the ovulation day as the *highest* LH value. The first-episode rule can pick a
-   premature surge.
+3. **LH peak = first surge episode** (default profile). Pattnaik reports multiple LH surges before the ovulating one
+   in 39 of 55 ovulatory cycles and defines the ovulation day as the *highest* LH value, so the first-episode rule can
+   pick a premature surge. The Mira profile already uses the highest-value-then-decline rule instead.
 4. **Reduced luteal PdG** (PCOS, perimenopause, luteal-phase deficiency) means a fixed 5 µg/mL can miss ovulation.
 
 Because of this, thresholds are **not hard-coded**: each prediction is computed under a named `AssayProfile`
-and stored with the version `biochem-<engine>+<profile>` (e.g. `biochem-1.0.0+spec-provisional-1`).
-The only registered profile is `spec-provisional-1` (the specification values, labelled provisional in its
-`evidence` field). Add a device-specific profile only after its thresholds are verified against a source (note Pattnaik's LH and E3G rules use an increment and a day-over-day ratio, which the current profile fields cannot express); the
-`/v1/analyze` request accepts `"profile"`, and an unknown name is rejected. The gateway worker currently always
-uses the default profile (selecting a profile per user or device is not wired yet).
+and stored with the version `biochem-<engine>+<profile>`. Registered profiles:
+
+| Profile | Source | Status |
+|---|---|---|
+| `spec-provisional-1` (default) | product specification | E3G/LH multiples unsupported by any source; PdG rule supported (Ecochard 2013) |
+| `mira-marquette-2021-preliminary` | Bouchard, Fehring & Mu 2021 (*Expert Rev Mol Diagn* 21:1349) | **PRELIMINARY: built from the abstract and highlights only; full text not read** |
+
+The **Mira profile** (the app targets the Mira monitor) uses absolute, device-specific rules: fertile window opens
+when E3G **> 150 ng/mL**; LH peak = the cycle's *highest* LH (**> 11 mIU/mL**) followed by **2 consecutive days at
+least 50 % lower**; the window stays open **4 days after the confirmed peak**. Because the peak needs the following
+two days, it is only known retrospectively; days before confirmation can still be `PEAK` as a *candidate* (LH > 11
+today or yesterday), and days after confirmation up to peak + 4 are `HIGH`. Unresolved before relying on it:
+
+* A 2023 Mira case report quotes **100 ng/mL** for the E3G cut-off; this abstract says **150**. Read the full text.
+* Whether "> 11 mIU/mL" is strict is ambiguous in the abstract (the engine treats it as strict).
+* **No Mira PdG threshold is published there**, so PdG confirmation is **disabled** in this profile; ovulation is
+  confirmed by BBT only. Ecochard's 5 µg/mL was measured by ELISA and cannot be assumed to transfer to Mira's PdG.
+* Reference was the Clearblue monitor, not ultrasound; 21 women × 3 cycles.
+
+Select a profile with `ASSAY_PROFILE` (worker environment); the default stays `spec-provisional-1`. The engine's
+`/v1/analyze` accepts `"profile"` and rejects unknown names (the worker then drops that job and audits an error).
+Add a profile only after its thresholds are verified against a source. Profiles cannot yet express Pattnaik's
+LH increment (baseline + 5 mIU/mL) or day-over-day E3G ratio.
 
 Design decisions you may want to review clinically:
 * "Consecutive" means calendar-consecutive. A fever/disrupted day inside the 6-day baseline blocks that

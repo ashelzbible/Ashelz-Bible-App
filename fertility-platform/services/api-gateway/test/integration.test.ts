@@ -346,6 +346,30 @@ suite('integration: Postgres RLS + real Python engine', () => {
     });
   });
 
+  describe('assay profile selection', () => {
+    it('the worker asks the real engine for the configured profile and stores it in the version', async () => {
+      await post('/api/v1/sync/push', tok(IDS.patientB, 'patient'), {
+        events: [ev('HORMONE', 29, { e3g_ng_ml: 160 }), ev('MUCUS', 29, { score: 0 })],
+      });
+      const mira = new RecalcWorker(workerPool, new HttpEngineClient(engine.url, TEST_ENV.ENGINE_TOKEN!), undefined, 'mira-marquette-2021-preliminary');
+      expect(await mira.drain()).toBe(1);
+      const [run] = await q<{ algorithm_version: string }>(
+        'SELECT algorithm_version FROM clinical_data.prediction_runs WHERE subject_id = $1 ORDER BY last_computed_at DESC LIMIT 1', [subjectB]);
+      expect(run!.algorithm_version).toMatch(/\+mira-marquette-2021-preliminary$/);
+      const r = await app.inject({ method: 'GET', url: '/api/v1/sync/pull?limit=500', headers: tok(IDS.patientB, 'patient') });
+      const day = r.json().predictions.days.find((d: { log_date: string }) => d.log_date === '2025-03-29');
+      expect(day.status).toBe('HIGH'); // E3G 160 > 150 ng/mL under the Mira rule
+      expect(day.reasoning.join(' ')).toContain('150 ng/mL');
+    });
+
+    it('an unknown profile is rejected by the engine and the job is dropped, not retried forever', async () => {
+      await post('/api/v1/sync/push', tok(IDS.patientB, 'patient'), { events: [ev('MUCUS', 30, { score: 1 })] });
+      const bad = new RecalcWorker(workerPool, new HttpEngineClient(engine.url, TEST_ENV.ENGINE_TOKEN!), undefined, 'no-such-profile');
+      await bad.drain(1);
+      expect(await q('SELECT 1 FROM clinical_data.recalc_jobs WHERE subject_id = $1', [subjectB])).toHaveLength(0);
+    });
+  });
+
   describe('GDPR erasure', () => {
     it('erase_subject removes a subject\'s PHI (break-glass function, not callable by the app)', async () => {
       await expect(phiPool.query('SELECT clinical_data.erase_subject($1)', [subjectA])).rejects.toThrow(/permission denied/);

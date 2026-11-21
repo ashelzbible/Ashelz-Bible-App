@@ -20,7 +20,7 @@ from datetime import date, timedelta
 from enum import Enum
 from fractions import Fraction
 
-from .profiles import DEFAULT_PROFILE, AssayProfile
+from .profiles import DEFAULT_PROFILE, AssayProfile, LhPeakRule
 
 # Readings are converted from their shortest decimal representation to exact
 # rationals (as are the profile thresholds), so comparisons such as
@@ -54,6 +54,8 @@ class HormoneResult:
     insufficient_baseline: tuple[Analyte, ...]
     # (day, analyte) pairs dropped as invalid or ambiguous.
     excluded: tuple[tuple[date, Analyte], ...]
+    # Last day of the fertile window (confirmed LH peak + N days) when the profile defines one.
+    fertile_window_end: date | None = None
 
 
 def _series(readings: list[HormoneReading], analyte: Analyte) -> tuple[dict[date, Fraction], list[tuple[date, Analyte]]]:
@@ -98,6 +100,22 @@ def _consecutive_run(days: list[date], length: int) -> list[date] | None:
     return None
 
 
+def _confirmed_peak(lh: dict[date, Fraction], rule: LhPeakRule) -> date | None:
+    """The cycle's highest LH value above rule.min_above, once it is followed by
+    rule.decline_days consecutive days each at least rule.decline_fraction lower.
+    Earliest day wins ties. None until the decline has been observed."""
+    candidates = [d for d in lh if lh[d] > rule.min_above]
+    if not candidates:
+        return None
+    peak = max(candidates, key=lambda d: (lh[d], -d.toordinal()))
+    limit = (1 - rule.decline_fraction) * lh[peak]
+    for k in range(1, rule.decline_days + 1):
+        nxt = peak + timedelta(days=k)
+        if nxt not in lh or lh[nxt] > limit:
+            return None
+    return peak
+
+
 def analyze_hormones(readings: list[HormoneReading], profile: AssayProfile = DEFAULT_PROFILE) -> HormoneResult:
     e3g, ex_e3g = _series(readings, Analyte.E3G)
     lh, ex_lh = _series(readings, Analyte.LH)
@@ -106,41 +124,62 @@ def analyze_hormones(readings: list[HormoneReading], profile: AssayProfile = DEF
     e3g_base, e3g_window = _baseline(e3g, profile.baseline_readings)
     lh_base, lh_window = _baseline(lh, profile.baseline_readings)
 
+    # A baseline is only required (and only reported missing) when the profile
+    # actually uses a baseline-relative rule for that analyte.
     insufficient: list[Analyte] = []
-    if e3g_base is None:
+    if profile.needs_e3g_baseline and e3g_base is None:
         insufficient.append(Analyte.E3G)
-    if lh_base is None:
+    if profile.needs_lh_baseline and lh_base is None:
         insufficient.append(Analyte.LH)
 
-    e3g_days = tuple(
-        d for d in sorted(e3g)
-        if e3g_base is not None and d not in e3g_window and e3g[d] >= profile.e3g_rise_factor * e3g_base
-    )
+    def e3g_hit(d: date) -> bool:
+        v = e3g[d]
+        if profile.e3g_above is not None and v > profile.e3g_above:
+            return True  # absolute rule: needs no baseline
+        return (
+            profile.e3g_rise_factor is not None
+            and e3g_base is not None
+            and d not in e3g_window  # baseline readings are never judged against themselves
+            and v >= profile.e3g_rise_factor * e3g_base
+        )
 
-    # The absolute LH criterion needs no baseline, so it applies to every
-    # reading; the relative criterion applies once a baseline exists and only
-    # to readings outside the baseline window.
-    lh_days = tuple(
-        d for d in sorted(lh)
-        if lh[d] >= profile.lh_surge_absolute
-        or (lh_base is not None and d not in lh_window and lh[d] >= profile.lh_surge_factor * lh_base)
-    )
+    def lh_hit(d: date) -> bool:
+        v = lh[d]
+        if profile.lh_surge_absolute is not None and v >= profile.lh_surge_absolute:
+            return True  # absolute rule: needs no baseline
+        if profile.lh_peak_rule is not None and v > profile.lh_peak_rule.min_above:
+            return True  # candidate peak; confirmed only after the decline
+        return (
+            profile.lh_surge_factor is not None
+            and lh_base is not None
+            and d not in lh_window
+            and v >= profile.lh_surge_factor * lh_base
+        )
 
-    # LH peak: highest value within the first surge episode (consecutive
-    # surge days); earliest day wins ties.
+    e3g_days = tuple(d for d in sorted(e3g) if e3g_hit(d))
+    lh_days = tuple(d for d in sorted(lh) if lh_hit(d))
+
     peak: date | None = None
-    if lh_days:
+    if profile.lh_peak_rule is not None:
+        peak = _confirmed_peak(lh, profile.lh_peak_rule)
+    elif lh_days:
+        # Highest value within the first surge episode (consecutive surge
+        # days); earliest day wins ties.
         episode = _episode(list(lh_days))
         peak = max(episode, key=lambda d: (lh[d], -d.toordinal()))
 
     confirmed: date | None = None
     run: list[date] = []
-    if peak is not None:
+    if peak is not None and profile.pdg_confirm is not None:
         after = [d for d in sorted(pdg) if d > peak and pdg[d] >= profile.pdg_confirm]
         found = _consecutive_run(after, profile.pdg_days)
         if found:
             run = found
             confirmed = found[-1]
+
+    window_end: date | None = None
+    if peak is not None and profile.fertile_window_days_after_peak is not None:
+        window_end = peak + timedelta(days=profile.fertile_window_days_after_peak)
 
     return HormoneResult(
         e3g_baseline=None if e3g_base is None else float(e3g_base),
@@ -152,6 +191,7 @@ def analyze_hormones(readings: list[HormoneReading], profile: AssayProfile = DEF
         pdg_run_days=tuple(run),
         insufficient_baseline=tuple(insufficient),
         excluded=tuple(sorted(ex_e3g + ex_lh + ex_pdg, key=lambda t: (t[0], t[1].value))),
+        fertile_window_end=window_end,
     )
 
 

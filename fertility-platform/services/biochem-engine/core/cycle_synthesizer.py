@@ -49,6 +49,7 @@ class Flag(str, Enum):
     BBT_SHIFT_CONFIRMED = "BBT_SHIFT_CONFIRMED"
     LH_SURGE = "LH_SURGE"
     LH_SURGE_RECENT = "LH_SURGE_RECENT"
+    FERTILE_WINDOW_AFTER_PEAK = "FERTILE_WINDOW_AFTER_PEAK"
     E3G_RISE = "E3G_RISE"
     MUCUS_FERTILE = "MUCUS_FERTILE"
     MUCUS_PEAK_QUALITY = "MUCUS_PEAK_QUALITY"
@@ -98,6 +99,30 @@ def _valid_mucus(readings: list[MucusReading]) -> tuple[dict[date, int], set[dat
         else:
             valid[day] = scores[0]
     return valid, invalid
+
+
+def _lh_rule_text(profile: AssayProfile) -> str:
+    parts: list[str] = []
+    if profile.lh_surge_factor is not None:
+        parts.append(f">= {float(profile.lh_surge_factor):g}x baseline")
+    if profile.lh_surge_absolute is not None:
+        parts.append(f">= {float(profile.lh_surge_absolute):g} mIU/mL")
+    if profile.lh_peak_rule is not None:
+        r = profile.lh_peak_rule
+        parts.append(
+            f"> {float(r.min_above):g} mIU/mL, a candidate peak confirmed when {r.decline_days} consecutive "
+            f"days follow at least {float(r.decline_fraction):.0%} lower"
+        )
+    return " or ".join(parts)
+
+
+def _e3g_rule_text(profile: AssayProfile) -> str:
+    parts: list[str] = []
+    if profile.e3g_rise_factor is not None:
+        parts.append(f">= {float(profile.e3g_rise_factor):g}x follicular baseline")
+    if profile.e3g_above is not None:
+        parts.append(f"> {float(profile.e3g_above):g} ng/mL")
+    return " or ".join(parts)
 
 
 def _status_for_day(
@@ -163,13 +188,13 @@ def _status_for_day(
 
     if surge_today:
         flags.append(Flag.LH_SURGE)
-        why.append(f"LH surge: >= {float(profile.lh_surge_factor):g}x baseline or >= {float(profile.lh_surge_absolute):g} mIU/mL.")
+        why.append(f"LH surge ({_lh_rule_text(profile)}).")
     elif surge_recent:
         flags.append(Flag.LH_SURGE_RECENT)
         why.append("Within 1 day after an LH surge; ovulation is imminent.")
     if e3g_today:
         flags.append(Flag.E3G_RISE)
-        why.append(f"E3G >= {float(profile.e3g_rise_factor):g}x follicular baseline.")
+        why.append(f"E3G rise ({_e3g_rule_text(profile)}).")
     if mucus_today is not None and mucus_today >= MUCUS_FERTILE_MIN:
         flags.append(Flag.MUCUS_FERTILE)
         why.append(f"Fertile-quality cervical mucus (score {mucus_today}).")
@@ -180,7 +205,11 @@ def _status_for_day(
         return DayStatus(day, FertilityStatus.PEAK, tuple(flags), tuple(why))
 
     # --- HIGH ----------------------------------------------------------------
-    if e3g_today or (mucus_today is not None and mucus_today >= MUCUS_FERTILE_MIN):
+    in_window_tail = horm.fertile_window_end is not None and horm.lh_peak_day is not None and horm.lh_peak_day < day <= horm.fertile_window_end
+    if in_window_tail:
+        flags.append(Flag.FERTILE_WINDOW_AFTER_PEAK)
+        why.append(f"Within the fertile window, which closes {horm.fertile_window_end} (confirmed LH peak {horm.lh_peak_day}).")
+    if in_window_tail or e3g_today or (mucus_today is not None and mucus_today >= MUCUS_FERTILE_MIN):
         if mucus_today == MUCUS_MAX:
             flags.append(Flag.MUCUS_PEAK_WITHOUT_HORMONE_SUPPORT)
             why.append("Egg-white mucus without E3G rise or LH surge; not escalated to PEAK.")
