@@ -35,6 +35,11 @@ async function withAuth(state, call) {
   return r;
 }
 
+/** Mark every event as not yet uploaded (used when an account that was device-only turns sync on). */
+export async function markAllPending(state) {
+  for (const r of [...state.events.values()]) if (!r.pending) await saveEvent(state, r.event, true);
+}
+
 /**
  * Push every pending event (idempotent: retries are safe), then pull everything after the stored cursor.
  * Returns { pushed, pulled, offline, error }.
@@ -65,10 +70,7 @@ export async function syncNow(state) {
       state.clock.observe(r.json.server_lamport);
       await state.vault.put('kv', 'cursor', state.cursor);
       await state.vault.put('kv', 'lamport', state.clock.now);
-      if (!r.json.has_more) {
-        if (r.json.predictions) { state.predictions = r.json.predictions; await state.vault.put('kv', 'predictions', state.predictions); }
-        break;
-      }
+      if (!r.json.has_more) break; // the server's own predictions are not used: the device computes the same result
     }
     state.lastSync = new Date().toISOString();
     await state.vault.put('kv', 'lastSync', state.lastSync);

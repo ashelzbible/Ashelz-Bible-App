@@ -36,9 +36,12 @@ try {
   await page.locator('#server').waitFor();
   assert.equal(await page.evaluate(() => navigator.serviceWorker?.controller ?? null), null);
   assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), 0);
-  ok('server-address field shown in the app; no service worker registered');
+  ok('server-address field offered when signing in; no service worker registered');
 
   await page.getByTestId('toggle-mode').click();
+  assert.equal(await page.locator('#sync').isChecked(), false, 'a new account is device-only unless sync is ticked');
+  assert.equal(await page.getByTestId('server-box').isHidden(), true, 'no server address is asked for device-only accounts');
+  await page.check('#sync');
   await page.fill('#server', 'ftp://nonsense');
   await page.fill('#name', 'Native Tester'); await page.fill('#email', `native-${Date.now()}@example.com`); await page.fill('#password', 'correct-horse-battery');
   await page.getByTestId('submit').click();
@@ -60,7 +63,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-testid=pending]')?.textContent.includes('All saved'), null, { timeout: 30000 });
   await page.getByTestId('tab-chart').click();
   await page.waitForFunction(() => [...document.querySelectorAll('.pill')].some((p) => p.textContent === 'Peak'), null, { timeout: 30000 });
-  ok('entry synced to the server and the server prediction (Peak) came back');
+  ok('entry synced to the server and the timeline shows Peak');
 
   assert.equal(await page.evaluate(() => localStorage.getItem('serverUrl')), new URL(api).origin);
   await page.getByTestId('tab-account').click();
@@ -68,6 +71,26 @@ try {
   await page.getByTestId('submit').waitFor();
   assert.equal(await page.inputValue('#server'), new URL(api).origin, 'server address is remembered');
   ok('server address remembered after sign-out');
+
+  // a device-only account in the app: no server address, and no request leaves the app at all
+  const calls = [];
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  await ctx2.addInitScript(() => { window.Capacitor = { isNativePlatform: () => true }; });
+  const p2 = await ctx2.newPage();
+  p2.on('request', (r) => { if (!r.url().startsWith(`http://localhost:${port}`)) calls.push(r.url()); });
+  await p2.goto(`http://localhost:${port}/`);
+  await p2.getByTestId('toggle-mode').click();
+  await p2.fill('#name', 'Offline Only'); await p2.fill('#email', `dev-${Date.now()}@example.com`); await p2.fill('#password', 'correct-horse-battery');
+  await p2.getByTestId('submit').click();
+  await p2.getByRole('heading', { name: 'Today' }).waitFor();
+  await p2.fill('#lh', '30'); await p2.fill('#temp', '36.5');
+  await p2.getByTestId('save').click();
+  await p2.getByTestId('msg').filter({ hasText: /Saved on this device/ }).waitFor();
+  await p2.getByTestId('tab-chart').click();
+  await p2.waitForFunction(() => [...document.querySelectorAll('.pill')].some((p) => p.textContent === 'Peak'));
+  assert.deepEqual(calls, [], `device-only account made requests: ${calls.join(', ')}`);
+  await ctx2.close();
+  ok('a device-only account in the app works with no server and sends nothing over the network');
 
   assert.deepEqual(problems, [], problems.join(' | '));
   ok('no console or page errors');

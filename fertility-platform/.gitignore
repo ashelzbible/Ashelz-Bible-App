@@ -8,7 +8,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
-apps/pwa/vendor/
 .local/
 apps/android/node_modules/
 apps/android/www/
@@ -20,3 +19,4 @@ apps/android/android/app/build/
 apps/android/android/app/src/main/assets/public/
 apps/android/android/app/src/main/assets/capacitor.config.json
 apps/android/android/app/src/main/assets/capacitor.plugins.json
+apps/pwa/test/golden.json

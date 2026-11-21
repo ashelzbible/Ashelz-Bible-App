@@ -21,7 +21,7 @@ const context = await browser.newContext({ viewport: { width: 390, height: 844 }
 const page = await context.newPage();
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_INTERNET_DISCONNECTED')) problems.push(`console: ${m.text()}`); }); // failed fetches while offline are expected
+page.on('console', (m) => { if (m.type() === 'error' && !/ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(m.text())) problems.push(`console: ${m.text()}`); }); // failed fetches while offline are expected
 const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
 
 async function logDay(date, { temp, lh, e3g, mucus, disturbed } = {}) {
@@ -50,6 +50,7 @@ try {
 
   // --- register ---------------------------------------------------------------
   await page.getByTestId('toggle-mode').click();
+  assert.equal(await page.locator('#sync').isChecked(), true, 'sync is on by default when the server is available');
   await page.fill('#name', 'E2E Tester');
   await page.fill('#email', email);
   await page.fill('#password', 'short');
@@ -67,7 +68,7 @@ try {
   await logDay(iso(-3), { temp: 36.5, e3g: 12, lh: 30, mucus: 'Egg-white' }); // LH 30 >= 25: surge
   await shot('02-today-logged');
   await page.getByTestId('tab-chart').click();
-  // predictions arrive asynchronously (worker + engine) and refine as events sync: wait for the final one
+  // the timeline is calculated on the device; wait for the final set of days
   await page.waitForFunction(() => [...document.querySelectorAll('.pill')].some((p) => p.textContent === 'Peak'), null, { timeout: 30000 });
   const pills = await page.locator('.pill').allTextContents();
   assert.equal(pills.length, 7, `expected 7 daily statuses, got ${pills}`);
@@ -75,7 +76,7 @@ try {
   assert.equal(await pending(), 'All saved & synced');
   await page.getByTestId('day').first().locator('summary').click();
   await shot('03-cycle');
-  ok(`events synced and server predictions arrived (${pills.length} days, includes Peak)`);
+  ok(`events synced and the timeline (calculated on the device) shows ${pills.length} days including Peak`);
 
   // --- raw device storage is encrypted -------------------------------------------
   const raw = await page.evaluate(async () => {
@@ -136,6 +137,35 @@ try {
   await p2.waitForFunction(() => document.querySelector('#temp')?.value === '36.7', null, { timeout: 30000 });
   await ctx2.close();
   ok('a second device signs in and pulls the same data from the server');
+
+  // --- a device-only account can turn sync on later and its data then reaches a second device ------------------------
+  const email2 = `later-${Date.now()}@example.com`;
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  const p3 = await ctx3.newPage();
+  await p3.goto(base);
+  await p3.getByTestId('toggle-mode').click();
+  await p3.uncheck('#sync');
+  await p3.fill('#name', 'Later Sync'); await p3.fill('#email', email2); await p3.fill('#password', password);
+  await p3.getByTestId('submit').click();
+  await p3.getByRole('heading', { name: 'Today' }).waitFor();
+  assert.match(await p3.getByTestId('status').textContent(), /This device only/);
+  await p3.fill('#date', iso(-4)); await p3.fill('#temp', '36.61');
+  await p3.getByTestId('save').click();
+  await p3.getByTestId('msg').filter({ hasText: /Saved on this device/ }).waitFor();
+  await p3.getByTestId('tab-account').click();
+  await p3.getByTestId('enable-sync').click();
+  await p3.getByTestId('sync-now').waitFor();
+  await p3.waitForFunction(() => document.querySelector('[data-testid=pending]')?.textContent.includes('All saved'), null, { timeout: 30000 });
+  const ctx4 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  const p4 = await ctx4.newPage();
+  await p4.goto(base);
+  await p4.fill('#email', email2); await p4.fill('#password', password);
+  await p4.getByTestId('submit').click();
+  await p4.getByRole('heading', { name: 'Today' }).waitFor();
+  await p4.fill('#date', iso(-4));
+  await p4.waitForFunction(() => document.querySelector('#temp')?.value === '36.61', null, { timeout: 30000 });
+  await ctx3.close(); await ctx4.close();
+  ok('a device-only account turned sync on; its earlier entry reached a second device');
 
   // --- validation, lock, wipe ------------------------------------------------------------------
   await page.fill('#date', iso(-1));

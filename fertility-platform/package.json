@@ -8,8 +8,10 @@
   ],
   "scripts": {
     "build": "npm run build -w @fertility/sync-protocol && node scripts/copy-client-protocol.mjs && npm run build -w @fertility/api-gateway",
-    "test": "npm run build -w @fertility/sync-protocol && npm test -w @fertility/sync-protocol && npm test -w @fertility/api-gateway",
+    "test": "npm run build -w @fertility/sync-protocol && npm test -w @fertility/sync-protocol && npm test -w @fertility/api-gateway && node scripts/copy-client-protocol.mjs --check && npm run test:pwa",
     "typecheck": "npm run build -w @fertility/sync-protocol && npm run typecheck -w @fertility/api-gateway",
-    "local": "bash scripts/run-local.sh"
+    "local": "bash scripts/run-local.sh",
+    "serve": "node scripts/serve-static.mjs",
+    "test:pwa": "node --test apps/pwa/test/engine.test.mjs"
   }
 }

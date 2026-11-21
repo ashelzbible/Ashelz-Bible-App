@@ -1,6 +1,6 @@
 // Service worker: the app shell works offline (stale-while-revalidate); API calls are never cached.
-const CACHE = 'cycle-demo-shell-v1';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/lib/store.js', '/lib/api.js', '/lib/sync.js', '/lib/view.js',
+const CACHE = 'cycle-demo-shell-v2';
+const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/lib/store.js', '/lib/api.js', '/lib/sync.js', '/lib/view.js', '/lib/engine/rational.js', '/lib/engine/profiles.js', '/lib/engine/engine.js', '/lib/engine/window.js', '/lib/engine/index.js',
   '/vendor/sync-protocol/clock.js', '/vendor/sync-protocol/order.js', '/vendor/sync-protocol/canonical.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 

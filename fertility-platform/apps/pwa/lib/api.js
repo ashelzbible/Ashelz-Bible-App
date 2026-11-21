@@ -55,3 +55,19 @@ export class Api {
   push(events) { return this.request('POST', '/api/v1/sync/push', { events }); }
   pull(cursor, limit = 500) { return this.request('GET', `/api/v1/sync/pull?cursor=${cursor}&limit=${limit}`); }
 }
+
+/**
+ * How this copy of the app can reach a server:
+ *   'same-origin' served by the API itself, 'native' the Android app (user supplies an address), 'none' static files only
+ * With 'none' the app is completely self-contained: accounts, storage and calculations all stay on the device.
+ */
+export async function detectServerMode() {
+  if (isNative()) return 'native';
+  const seen = () => { try { return localStorage.getItem('serverSeen') === '1'; } catch { return false; } };
+  try {
+    const res = await fetch('/healthz', { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+    const body = res.ok ? await res.json() : null;
+    if (body?.status === 'ok') { try { localStorage.setItem('serverSeen', '1'); } catch { /* not persisted */ } return 'same-origin'; }
+  } catch { /* unreachable or not an API */ }
+  return seen() ? 'same-origin' : 'none'; // remembered, so an offline start does not hide the sync option
+}

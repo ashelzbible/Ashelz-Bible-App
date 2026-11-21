@@ -1,5 +1,6 @@
 import { effectiveEvents } from '../vendor/sync-protocol/order.js';
 import { pendingCount } from './sync.js';
+import { PROFILES } from './engine/profiles.js';
 
 /** DOM builder. Only textContent is ever used for data, so nothing from the server can inject markup. */
 export function h(tag, props = {}, ...children) {
@@ -28,6 +29,11 @@ export function effectiveOn(state, date) {
 }
 
 function statusBar(state) {
+  if (!state.cloud) {
+    return h('div', { className: 'status', 'data-testid': 'status' },
+      h('span', {}, h('span', { className: 'dot' }), 'This device only'),
+      h('span', { 'data-testid': 'pending' }, 'Private, not synced'));
+  }
   const n = pendingCount(state);
   return h('div', { className: 'status', 'data-testid': 'status' },
     h('span', {}, h('span', { className: `dot${state.online ? '' : ' off'}` }), state.online ? 'Online' : 'Offline'),
@@ -36,23 +42,31 @@ function statusBar(state) {
 
 export function loginView(state, on) {
   const registering = state.mode === 'register';
-  const server = h('input', { type: 'url', id: 'server', placeholder: 'https://your-server.example.com', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: state.prefillServer ?? '' });
+  const sm = state.serverMode; // 'same-origin' | 'native' | 'none'
   const email = h('input', { type: 'email', id: 'email', autocomplete: 'username', required: true, value: state.prefillEmail ?? '' });
   const pw = h('input', { type: 'password', id: 'password', autocomplete: registering ? 'new-password' : 'current-password', required: true, minlength: registering ? 10 : 1 });
   const name = h('input', { type: 'text', id: 'name', autocomplete: 'name' });
+  const server = h('input', { type: 'url', id: 'server', placeholder: 'https://your-server.example.com', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: state.prefillServer ?? '' });
+  const sync = h('input', { type: 'checkbox', id: 'sync', checked: sm === 'same-origin' ? (state.prefillSync ?? true) : (state.prefillSync ?? false) });
+  const serverBox = h('div', { hidden: !(sm === 'native' && (!registering || sync.checked)), 'data-testid': 'server-box' },
+    h('label', { for: 'server' }, registering ? 'Server address' : 'Server address (optional)'), server,
+    h('p', { className: 'muted' }, registering ? 'Where to sync and back up your entries.' : 'Only needed to sign in to a synced account on a new phone. Leave empty to use this device only.'));
+  sync.addEventListener('change', () => { serverBox.hidden = !(sm === 'native' && sync.checked); });
   const err = h('p', { className: 'error', role: 'alert', 'data-testid': 'error' }, state.error ?? '');
   const submit = h('button', { type: 'submit', className: 'full', 'data-testid': 'submit' }, registering ? 'Create account' : 'Sign in');
-  const form = h('form', { className: 'card', onsubmit: (e) => { e.preventDefault(); submit.disabled = true; on.submit({ email: email.value, password: pw.value, name: name.value, server: server.value }).finally(() => { submit.disabled = false; }); } },
+  const form = h('form', { className: 'card', onsubmit: (e) => { e.preventDefault(); submit.disabled = true; on.submit({ email: email.value, password: pw.value, name: name.value, server: server.value, sync: sync.checked }).finally(() => { submit.disabled = false; }); } },
     h('h2', {}, registering ? 'Create your account' : 'Sign in'),
-    state.native ? [h('label', { for: 'server' }, 'Server address'), server, h('p', { className: 'muted' }, 'The address of the server this app syncs with. It is only needed for the first sign-in on this phone.')] : null,
     registering ? [h('label', { for: 'name' }, 'Your name'), name] : null,
     h('label', { for: 'email' }, 'Email'), email,
     h('label', { for: 'password' }, registering ? 'Password (at least 10 characters)' : 'Password'), pw,
+    registering && sm !== 'none' ? h('label', { className: 'check', for: 'sync' }, sync, 'Also sync and back up with a server (optional)') : null,
+    registering && sm === 'none' ? h('p', { className: 'muted' }, 'No server needed: your account, entries and results all stay on this device.') : null,
+    serverBox,
     err, h('div', { className: 'stack' }, submit,
       h('button', { type: 'button', className: 'secondary full', onclick: on.toggleMode, 'data-testid': 'toggle-mode' }, registering ? 'I already have an account' : 'Create an account')));
   return h('div', {},
     h('h1', {}, 'Cycle Tracker'),
-    h('p', { className: 'muted' }, 'Your entries are stored encrypted on this device and sync when you are online. Your password unlocks them, so it cannot be reset: keep it safe.'),
+    h('p', { className: 'muted' }, 'Your entries are stored encrypted on this device and work without a connection. Your password unlocks them, so it cannot be reset: keep it safe.'),
     form);
 }
 
@@ -75,7 +89,8 @@ export function todayView(state, on) {
   const msg = h('p', { className: state.msgKind === 'error' ? 'error' : 'ok', role: 'status', 'data-testid': 'msg' }, state.msg ?? '');
   const num = (el) => (el.value.trim() === '' ? undefined : Number(el.value));
 
-  const form = h('form', { oninput: on.dirty, onchange: on.dirty, onsubmit: (e) => { e.preventDefault(); on.save({
+  const edited = (e) => { if (e.target.id !== 'date') on.dirty(); }; // choosing a date is navigation, not an unsaved edit
+  const form = h('form', { oninput: edited, onchange: edited, onsubmit: (e) => { e.preventDefault(); on.save({
     temp: num(f.temp), disturbed: f.disturbed.checked, lh: num(f.lh), e3g: num(f.e3g), pdg: num(f.pdg), cycle: f.cycle.checked,
     mucus: (mucusRadios.map((l) => l.firstChild).find((r) => r.checked) ?? {}).value,
   }); } },
@@ -128,18 +143,34 @@ export function chartView(state) {
       : [h('h2', {}, 'Daily fertility status'), ...days.map((d) => h('details', { className: 'day', 'data-testid': 'day' },
           h('summary', { className: 'top' }, h('span', {}, d.log_date), h('span', { className: `pill ${d.status}` }, STATUS_LABEL[d.status] ?? d.status)),
           h('ul', {}, d.reasoning.map((r) => h('li', {}, r)))))],
-    h('p', { className: 'muted' }, p ? `Computed ${new Date(p.computed_at).toLocaleString()} · ${version}` : ''));
+    h('p', { className: 'muted', 'data-testid': 'computed' }, p ? `Computed ${p.computed_on === 'device' ? 'on this device ' : ''}${new Date(p.computed_at).toLocaleString()} · ${version}` : ''));
 }
 
 export function accountView(state, on) {
+  const cloud = state.cloud;
+  const serverInput = h('input', { type: 'url', id: 'server', placeholder: 'https://your-server.example.com', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: state.prefillServer ?? '' });
+  const profile = h('select', { id: 'profile', 'data-testid': 'profile-select', onchange: (e) => on.setProfile(e.target.value) },
+    Object.keys(PROFILES).map((n) => h('option', { value: n, selected: n === state.profileName }, n)));
   return h('div', {}, h('h1', {}, 'Account'), statusBar(state),
     h('div', { className: 'card' }, h('h2', {}, state.user?.name ?? 'Signed in'), h('p', { className: 'muted' }, state.email),
-      h('p', { className: 'muted', 'data-testid': 'last-sync' }, state.lastSync ? `Last synced ${new Date(state.lastSync).toLocaleString()}` : 'Not synced yet'),
-      h('div', { className: 'stack' },
-        h('button', { className: 'full', onclick: on.sync, 'data-testid': 'sync-now', disabled: state.syncing }, state.syncing ? 'Syncing…' : 'Sync now'),
-        h('button', { className: 'secondary full', onclick: on.logout, 'data-testid': 'logout' }, 'Lock and sign out'))),
+      cloud
+        ? [h('p', { className: 'muted', 'data-testid': 'last-sync' }, state.lastSync ? `Last synced ${new Date(state.lastSync).toLocaleString()}` : 'Not synced yet'),
+           h('button', { className: 'full', onclick: on.sync, 'data-testid': 'sync-now', disabled: state.syncing }, state.syncing ? 'Syncing…' : 'Sync now')]
+        : h('p', { className: 'muted', 'data-testid': 'device-only' }, 'This account lives only on this device. Nothing is sent anywhere.'),
+      h('div', { className: 'stack' }, h('button', { className: 'secondary full', onclick: on.logout, 'data-testid': 'logout' }, 'Lock and sign out'))),
+    !cloud && state.serverMode !== 'none'
+      ? h('div', { className: 'card' }, h('h2', {}, 'Sync across devices'),
+          h('p', { className: 'muted' }, 'Optional. Uploads your entries to a server so they are backed up and can be opened on another phone.'),
+          state.serverMode === 'native' ? [h('label', { for: 'server' }, 'Server address'), serverInput] : null,
+          h('p', { className: 'error', role: 'alert', 'data-testid': 'sync-error' }, state.syncError ?? ''),
+          h('button', { className: 'full', onclick: () => on.enableSync(serverInput.value), 'data-testid': 'enable-sync' }, 'Turn on sync'))
+      : null,
+    h('div', { className: 'card' }, h('h2', {}, 'Hormone thresholds'),
+      h('p', { className: 'muted' }, 'The numbers used to read your urine hormone results. Results are calculated on this device.'),
+      h('label', { for: 'profile' }, 'Threshold set'), profile,
+      h('details', {}, h('summary', { className: 'muted' }, 'Where these numbers come from'), h('p', { className: 'muted', 'data-testid': 'evidence' }, PROFILES[state.profileName]?.evidence ?? ''))),
     h('div', { className: 'card' }, h('h2', {}, 'This device'),
-      h('p', { className: 'muted' }, 'Entries are encrypted on this device and unlock with your password, even offline. The server keeps your data under a pseudonym, separate from your name and email.'),
+      h('p', { className: 'muted' }, 'Entries are encrypted on this device and unlock with your password, even offline.'),
       h('button', { className: 'danger full', onclick: on.wipe, 'data-testid': 'wipe' }, 'Delete data on this device')),
     h('p', { className: 'muted' }, 'Demo build. Not a medical device.'));
 }

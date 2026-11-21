@@ -155,6 +155,33 @@ node services/api-gateway/dist/worker-main.js            # recalculation worker
 Event kinds: `BBT`, `HORMONE`, `MUCUS`, `CYCLE` (period start — bounds the engine's analysis window);
 ops `SET` / `RETRACT`.
 
+## Run it like Pesa: no server, no database
+
+The web app is plain static files (`apps/pwa/`) and **needs no backend at all**. Accounts, storage and the fertility
+calculations all run on the device, and the data stays there (encrypted under the user's password). Serve the folder
+with any static file server and open it:
+
+```bash
+npm run serve                          # http://localhost:8080  (zero dependencies; Node only)
+# or:  cd apps/pwa && python3 -m http.server 8080
+```
+Nothing to install or build: the shared protocol code in `apps/pwa/vendor/` is committed. A server is **optional**: when
+the app is served by this repo's API (or, in the Android app, when you enter a server address), sign-up offers
+"also sync and back up with a server", and a device-only account can turn sync on later from the Account tab.
+
+**On-device calculation.** `apps/pwa/lib/engine/` is a JavaScript port of the Python engine (exact rational arithmetic,
+same causal day-by-day evaluation, same flags and reasoning text). `npm run test:pwa` runs the real Python engine on 528
+generated cases (realistic cycles, boundary values, fevers, gaps, duplicates, invalid entries, both threshold sets) and
+requires the JavaScript result to be **identical**; I also confirmed the test fails when I deliberately break the port.
+The cycle-window logic is checked against the gateway's TypeScript version. Two implementations of the engine now
+exist, so any change to the Python rules must be mirrored in JavaScript; that parity test is what catches a miss.
+The threshold set (default or the preliminary Mira set) is chosen in the Account tab.
+
+Verified in a real phone-sized browser, with only static files served and a check that **no API request is made**
+(`node scripts/serve-static.mjs 8085` then `node scripts/e2e-local.mjs http://127.0.0.1:8085`): create an account, log
+days, timeline calculated immediately, switch threshold set, ciphertext-only storage, offline reload, wrong password
+refused (8 checks). Not verified on an actual phone.
+
 ## Run it on your own computer
 
 **Option A: one command (no Docker).** Needs Node 22+, Python 3.12+ and PostgreSQL 14+ installed:
@@ -190,11 +217,12 @@ download the artifact. Result: `apps/android/dist/cycle-tracker-demo-debug.apk` 
 (Android asks). It is a **debug-signed** build for testing: it is not for the Play Store, which needs a release
 key. Android may show a "not verified" warning.
 
-**First launch:** the app has no server of its own. Enter the **server address** of a running deployment (for
-example your Render address) together with your account details. After the first sign-in the address is remembered,
-entries are stored encrypted on the phone, and everything keeps working offline; it syncs when the server is
-reachable. **The server must use https**: cleartext `http://` is blocked in this build (it would expose health data on
-the network), so a plain `http://192.168.x.x` development server will not work. Auto-backup of the app's data is off.
+**First launch:** the app works **with no server**: create an account and start logging; everything is stored
+encrypted on the phone and the timeline is calculated there. To also back up and use the account on another phone,
+tick *sync* when creating the account (or turn it on later in the Account tab) and enter the **server address** of a
+running deployment (for example your Render address). After that the address is remembered and the app syncs when
+the server is reachable. **A server address must use https**: cleartext `http://` is blocked in this build (it would expose health data on
+the network), so a plain `http://192.168.x.x` development server will not work (device-only use needs no address at all). Auto-backup of the app's data is off.
 
 Not verified: the APK was built and inspected here (package, signature, bundled files, no cleartext, no backup) and
 the app's native-mode behaviour (server-address field, different-origin API calls, no service worker) was tested in a
@@ -235,7 +263,7 @@ Render database permissions (the provisioner needs a database login that can cre
 
 ## Not built yet (be aware before relying on this)
 
-* **No password reset or e-mail verification**, no refresh tokens (access tokens last `TOKEN_TTL`, default 1 h; the
+* A forgotten password means the on-device data cannot be recovered (a synced account's server copy can be re-downloaded on a new phone). **No password reset or e-mail verification**, no refresh tokens (access tokens last `TOKEN_TTL`, default 1 h; the
   web app silently signs in again while open), and no account lockout beyond the per-IP rate limit.
   Clinician and admin accounts cannot self-register and there is no UI for provisioning them.
 * **No React Native/SQLCipher app and no clinic dashboard** (roadmap phase 3); the demo apps (web and Android shell) are patient-only. No
