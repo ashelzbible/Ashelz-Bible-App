@@ -155,6 +155,30 @@ node services/api-gateway/dist/worker-main.js            # recalculation worker
 Event kinds: `BBT`, `HORMONE`, `MUCUS`, `CYCLE` (period start — bounds the engine's analysis window);
 ops `SET` / `RETRACT`.
 
+## Run it on your own computer
+
+**Option A: one command (no Docker).** Needs Node 22+, Python 3.12+ and PostgreSQL 14+ installed:
+```bash
+pip install fastapi uvicorn pydantic     # the engine's runtime
+npm run local                            # installs, builds, starts everything
+```
+Open **http://localhost:8080**, create an account, and log a few days. The script starts a private PostgreSQL in
+`.local/` (stopped on Ctrl-C; your data and its secret survive restarts, delete `.local/` to start fresh) and runs the
+same provisioning and start script as the hosted demo. To use a database you already have, set `DATABASE_OWNER_URL`
+to a login that may create roles. `PORT=9000 npm run local` changes the port, and
+`ASSAY_PROFILE=mira-marquette-2021-preliminary npm run local` tries the Mira thresholds. It will not start
+PostgreSQL as root; run it as a normal user.
+
+**Option B: Docker.** `docker compose up --build`, then open http://localhost:8080 (placeholder passwords; local use only).
+
+**Using it on a phone while developing:** `http://localhost` works for installing the app on the same computer. A
+phone on your Wi-Fi can open it with `HOST=0.0.0.0 npm run local`, but browsers only allow *installing* and offline
+mode over https, so use the hosted demo or an https tunnel for that.
+
+Verified: Option A was run from a clean copy as a normal (non-root) user: private database creation, migrations,
+the 9-check browser test, restart with data preserved, and clean shutdown. Option B (`docker-compose.yml`) was **not**
+run (no Docker daemon was available).
+
 ## Hosted demo and phone app
 
 The repo includes an installable **web app (PWA)** in `apps/pwa/` that the API serves at `/`, and a one-click

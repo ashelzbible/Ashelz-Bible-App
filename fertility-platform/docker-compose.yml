@@ -1,0 +1,30 @@
+# Run everything with Docker:   docker compose up --build      then open http://localhost:8080
+# Local use only. The database password and MASTER_SECRET below are placeholders; they are not safe for any shared or
+# internet-facing deployment (the Render blueprint generates a real secret).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: local-dev-only
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_OWNER_URL: postgres://postgres:local-dev-only@db:5432/postgres
+      MASTER_SECRET: ${MASTER_SECRET:-local-dev-master-secret-change-me-0123456789}
+      NODE_ENV: development          # plain http on localhost: do not force https subresources
+      TRUST_PROXY: "false"
+      ASSAY_PROFILE: ${ASSAY_PROFILE:-spec-provisional-1}
+volumes:
+  dbdata:

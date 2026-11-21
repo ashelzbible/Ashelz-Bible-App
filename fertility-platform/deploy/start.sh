@@ -11,7 +11,7 @@ node deploy/provision.mjs
 eval "$(node deploy/env.mjs)"
 export ENGINE_URL="${ENGINE_URL:-http://127.0.0.1:8000}"
 
-( cd services/biochem-engine && exec python3 -m uvicorn app.asgi:app --host 127.0.0.1 --port 8000 --log-level warning ) &
+( cd services/biochem-engine && exec "${PYTHON:-python3}" -m uvicorn app.asgi:app --host 127.0.0.1 --port 8000 --log-level warning ) &
 ENGINE_PID=$!
 
 node services/api-gateway/dist/main.js &
