@@ -90,11 +90,11 @@ test('cycle-window selection equals the gateway implementation', { skip: !exists
     const rows = [];
     const count = Math.floor(rnd() * 25);
     for (let i = 0; i < count; i++) {
-      const kind = pick(['BBT', 'HORMONE', 'MUCUS', 'CYCLE', 'BBT', 'MUCUS']);
+      const kind = pick(['BBT', 'HORMONE', 'MUCUS', 'CYCLE', 'BBT', 'MUCUS', 'PERIOD', 'PERIOD', 'PERIOD', 'SYMPTOMS']);
       const log_date = dateOf(Math.floor(rnd() * pick([30, 120, 500])));
       const payload = kind === 'BBT' ? { temp_c: 36.4 + rnd(), sleep_disrupted: rnd() < 0.2 }
         : kind === 'HORMONE' ? { ...(rnd() < 0.8 && { lh_miu_ml: rnd() * 30 }), ...(rnd() < 0.8 && { e3g_ng_ml: rnd() * 200 }), ...(rnd() < 0.5 && { pdg_ug_ml: rnd() * 9 }) }
-        : kind === 'MUCUS' ? { score: Math.floor(rnd() * 5) } : {};
+        : kind === 'MUCUS' ? { score: Math.floor(rnd() * 5) } : kind === 'SYMPTOMS' ? { tags: ['cramps'] } : {};
       rows.push({ kind, log_date, payload });
     }
     assert.deepEqual(buildWindow(rows), buildAnalyzeRequest(rows), `rows case ${n}`);

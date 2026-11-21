@@ -12,6 +12,6 @@
     "typecheck": "npm run build -w @fertility/sync-protocol && npm run typecheck -w @fertility/api-gateway",
     "local": "bash scripts/run-local.sh",
     "serve": "node scripts/serve-static.mjs",
-    "test:pwa": "node --test apps/pwa/test/engine.test.mjs"
+    "test:pwa": "node --test apps/pwa/test/engine.test.mjs apps/pwa/test/domain.test.mjs"
   }
 }

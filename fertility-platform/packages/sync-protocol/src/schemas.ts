@@ -42,6 +42,16 @@ export const hormonePayload = z
 
 export const mucusPayload = z.object({ score: z.number().int().min(0).max(4) }).strict();
 
+/** A day of menstrual bleeding. Cycle starts are derived from runs of these days. */
+export const periodPayload = z.object({}).strict();
+
+export const SYMPTOM_TAGS = ['cramps', 'mood_swings', 'headache', 'breast_tenderness', 'bloating', 'other'] as const;
+export type SymptomTag = (typeof SYMPTOM_TAGS)[number];
+export const symptomsPayload = z
+  .object({ tags: z.array(z.enum(SYMPTOM_TAGS)).min(1).max(SYMPTOM_TAGS.length) })
+  .strict()
+  .refine((p) => new Set(p.tags).size === p.tags.length, { message: 'tags must be unique' });
+
 /** First day of menstrual bleeding: starts a new cycle and bounds the engine's analysis window. */
 export const cyclePayload = z.object({}).strict();
 
@@ -65,10 +75,14 @@ export const syncEventSchema = z.union([
   setEvent('HORMONE', hormonePayload),
   setEvent('MUCUS', mucusPayload),
   setEvent('CYCLE', cyclePayload),
+  setEvent('PERIOD', periodPayload),
+  setEvent('SYMPTOMS', symptomsPayload),
   retractEvent('BBT'),
   retractEvent('HORMONE'),
   retractEvent('MUCUS'),
   retractEvent('CYCLE'),
+  retractEvent('PERIOD'),
+  retractEvent('SYMPTOMS'),
 ]);
 
 export const pushRequestSchema = z
@@ -84,7 +98,7 @@ export const pullQuerySchema = z
   })
   .strict();
 
-export type EventKind = 'BBT' | 'HORMONE' | 'MUCUS' | 'CYCLE';
+export type EventKind = 'BBT' | 'HORMONE' | 'MUCUS' | 'CYCLE' | 'PERIOD' | 'SYMPTOMS';
 export type SyncEvent = z.infer<typeof syncEventSchema>;
 export type PushRequest = z.infer<typeof pushRequestSchema>;
 export type PullQuery = z.infer<typeof pullQuerySchema>;

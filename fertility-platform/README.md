@@ -152,8 +152,37 @@ node services/api-gateway/dist/worker-main.js            # recalculation worker
 | `POST /api/v1/consents` · `DELETE /api/v1/consents/:clinicianId` | patient | grant / revoke clinician access |
 | `GET /healthz` · `/readyz` | public | liveness / DB readiness |
 
-Event kinds: `BBT`, `HORMONE`, `MUCUS`, `CYCLE` (period start — bounds the engine's analysis window);
+Event kinds: `BBT`, `HORMONE`, `MUCUS`, `PERIOD` (a bleeding day; cycle starts are derived from runs of these days and bound the
+engine's analysis window), `SYMPTOMS` (tags such as cramps, bloating; never analysed), and the older `CYCLE` (an explicit cycle start);
 ops `SET` / `RETRACT`.
+
+## The app's screens (version 1.2)
+
+Built to the supplied design (purple theme, lotus logo, bottom tabs): **Home** (cycle-day ring, next period, fertility
+window, ovulation, quick-log tiles), **Calendar** (period, fertile days, ovulation star, today; tap a day to log it, cycle
+overview, tip), **Log Your Day** (period yes/no, temperature with ± buttons, cervical mucus: Dry / Creamy / Watery / Egg White,
+LH result, symptoms, Save Today), **Hormones** (LH, E3G, PdG numbers), **Charts** (temperature and hormone charts with 6M /
+3M / 1M / custom ranges and tap-for-details, plus the daily status with reasoning), **History** (current and previous cycles,
+insights) and **Settings** (profile, sync, reminders, cycle preferences incl. threshold set, °C/°F, privacy, help, about, log out).
+The first image supplied (a different app with a "Buddy" chat) was treated as inspiration only; nothing of it was copied.
+
+**Measured vs estimated.** *Measured* results come from the engine, from what you logged (temperature shift, LH/E3G/PdG,
+mucus). *Estimates* (next period, ovulation and the fertile window ahead of time) are calendar statistics from your past
+cycle lengths (average of the last six; a typical 28 days until you have two cycles) with a 14-day luteal phase and a
+six-day window, always labelled "estimate" and drawn dashed on the calendar. They are not clinically validated.
+Cycle starts come from runs of logged period days (a gap of up to 9 days stays in the same bleed).
+
+Differences from the design, on purpose: the LH test chips are *derived* from the LH number entered on the Hormones screen
+(the engine needs numbers, not just positive/negative); mucus has the design's four options (the older "sticky" level is
+no longer offered); there is a small "slept badly or unwell" tick under temperature because the engine must ignore such
+readings; the lotus, flowers and avatar are simplified drawings made for this app (the design's illustrations are
+images that were not supplied as files), and the avatar shows initials.
+
+**Daily reminder (Android app only).** Settings → Notifications schedules a local notification ("Time to log your day.",
+no health information) through the Capacitor local-notifications plugin. The APK contains the plugin, its notification
+permission and its scheduler, but **this was not run on an Android device**; in a browser the screen says reminders need
+the Android app. Tests: `npm run test:pwa` (engine parity + cycle/forecast/units logic), and the three browser tests
+`scripts/e2e-local.mjs` (no server), `e2e-pwa.mjs` (server) and `e2e-native.mjs` (Android mode).
 
 ## Run it like Pesa: no server, no database
 

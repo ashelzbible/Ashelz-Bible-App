@@ -32,6 +32,8 @@ describe('event schema', () => {
     expect(syncEventSchema.safeParse(bbt({ kind: 'HORMONE', payload: { lh_miu_ml: 12.5 } })).success).toBe(true);
     expect(syncEventSchema.safeParse(bbt({ kind: 'MUCUS', payload: { score: 4 } })).success).toBe(true);
     expect(syncEventSchema.safeParse(bbt({ kind: 'CYCLE', payload: {} })).success).toBe(true);
+    expect(syncEventSchema.safeParse(bbt({ kind: 'PERIOD', payload: {} })).success).toBe(true);
+    expect(syncEventSchema.safeParse(bbt({ kind: 'SYMPTOMS', payload: { tags: ['cramps', 'bloating'] } })).success).toBe(true);
     const { payload, ...retract } = bbt({ op: 'RETRACT' });
     expect(payload).toBeDefined();
     expect(syncEventSchema.safeParse(retract).success).toBe(true);
@@ -50,6 +52,10 @@ describe('event schema', () => {
     ['empty hormone payload', bbt({ kind: 'HORMONE', payload: {} })],
     ['negative hormone', bbt({ kind: 'HORMONE', payload: { pdg_ug_ml: -1 } })],
     ['cycle start with data', bbt({ kind: 'CYCLE', payload: { flow: 3 } })],
+    ['period with data', bbt({ kind: 'PERIOD', payload: { flow: 2 } })],
+    ['symptoms: unknown tag', bbt({ kind: 'SYMPTOMS', payload: { tags: ['telepathy'] } })],
+    ['symptoms: empty list', bbt({ kind: 'SYMPTOMS', payload: { tags: [] } })],
+    ['symptoms: duplicate tags', bbt({ kind: 'SYMPTOMS', payload: { tags: ['cramps', 'cramps'] } })],
     ['unknown payload field', bbt({ payload: { temp_c: 36.5, name: 'x' } })],
     ['unknown envelope field', bbt({ extra: 1 })],
     ['non-uuid event id', bbt({ event_id: 'abc' })],

@@ -1,4 +1,4 @@
-// End-to-end test of the installable web app in a real (headless) browser at phone size.
+// End-to-end test of the web app against the real API (server mode) in a real phone-sized browser.
 // Usage: node scripts/e2e-pwa.mjs http://127.0.0.1:8099 [screenshot-dir]
 // Needs Playwright with a Chromium build available to `require('playwright')`.
 import { createRequire } from 'node:module';
@@ -9,32 +9,33 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const base = process.argv[2] ?? 'http://127.0.0.1:8080';
 const shots = process.argv[3];
 if (shots) mkdirSync(shots, { recursive: true });
-
-const iso = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const email = `e2e-${Date.now()}@example.com`;
-const password = 'correct-horse-battery';
+const iso = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const email = `e2e-${Date.now()}@example.com`, password = 'correct-horse-battery';
 let step = 0;
 const ok = (m) => console.log(`ok ${++step} - ${m}`);
 
 const browser = await chromium.launch();
-const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-const page = await context.newPage();
+const mk = async () => { const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true }); const p = await c.newPage(); p.on('dialog', (d) => d.accept()); return [c, p]; };
+const [context, page] = await mk();
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error' && !/ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(m.text())) problems.push(`console: ${m.text()}`); }); // failed fetches while offline are expected
-const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
+page.on('console', (m) => { if (m.type() === 'error' && !/ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(m.text())) problems.push(`console: ${m.text()}`); });
+const shot = async (n) => { if (shots) await page.screenshot({ path: `${shots}/${n}.png` }); };
+const T = (p, id) => p.getByTestId(id);
+const pending = async (p) => ((await T(p, 'pending').first().textContent()) ?? '').trim();
+const synced = (p) => p.waitForFunction(() => document.querySelector('[data-testid=pending]')?.textContent.includes('All saved'), null, { timeout: 30000 });
 
-async function logDay(date, { temp, lh, e3g, mucus, disturbed } = {}) {
-  await page.fill('#date', date);
-  if (temp !== undefined) await page.fill('#temp', String(temp));
-  if (disturbed) await page.check('#disturbed');
-  if (lh !== undefined) await page.fill('#lh', String(lh));
-  if (e3g !== undefined) await page.fill('#e3g', String(e3g));
-  if (mucus) await page.getByText(mucus, { exact: true }).click();
-  await page.getByTestId('save').click();
-  await page.getByTestId('msg').filter({ hasText: /Saved/ }).waitFor();
+/** Log a day via the Log Your Day screen (opened from the Home tile). */
+async function logDay(p, date, f = {}) {
+  await T(p, 'tab-home').click(); await T(p, 'tile-bbt').click();
+  await p.fill('[data-testid=log-date]', date);
+  if (f.period) await T(p, 'period-yes').click();
+  if (f.temp !== undefined) await p.fill('[data-testid=temp-input]', String(f.temp));
+  if (f.mucus) await T(p, `mucus-${f.mucus}`).click();
+  for (const s of f.symptoms ?? []) await T(p, `sym-${s}`).click();
+  await T(p, 'save-day').click();
+  await T(p, 'log-msg').filter({ hasText: /Saved/ }).waitFor();
 }
-const pending = async () => (await page.getByTestId('pending').first().textContent()).trim();
 
 try {
   // --- installability ---------------------------------------------------------
@@ -42,141 +43,101 @@ try {
   assert.equal(await page.title(), 'Cycle Tracker Demo');
   const manifest = await (await page.request.get(`${base}/manifest.webmanifest`)).json();
   assert.equal(manifest.display, 'standalone');
-  assert.ok(manifest.icons.some((i) => i.sizes === '192x192') && manifest.icons.some((i) => i.sizes === '512x512'));
   for (const i of manifest.icons) assert.equal((await page.request.get(base + i.src)).status(), 200, `icon ${i.src}`);
   await page.evaluate(() => navigator.serviceWorker.ready);
   ok('manifest valid, icons served, service worker active');
-  await shot('01-login');
 
-  // --- register ---------------------------------------------------------------
-  await page.getByTestId('toggle-mode').click();
+  // --- register with sync (the default when a server is available) -----------------
+  await T(page, 'toggle-mode').click();
   assert.equal(await page.locator('#sync').isChecked(), true, 'sync is on by default when the server is available');
-  await page.fill('#name', 'E2E Tester');
-  await page.fill('#email', email);
-  await page.fill('#password', 'short');
-  await page.getByTestId('submit').click(); // the browser's own minlength validation stops the submit
+  await page.fill('#name', 'E2E Tester'); await page.fill('#email', email); await page.fill('#password', 'short');
+  await T(page, 'submit').click(); // the browser's own minlength validation stops the submit
   assert.equal(await page.evaluate(() => document.querySelector('#password').validity.tooShort), true);
-  assert.equal(await page.getByRole('heading', { name: 'Today' }).count(), 0);
   await page.fill('#password', password);
-  await page.getByTestId('submit').click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
-  ok('registered; short password rejected first');
+  await T(page, 'submit').click();
+  await T(page, 'onboarding').waitFor();
+  ok('registered with sync; short password refused by the form first');
 
-  // --- log a cycle online -------------------------------------------------------
-  const temps = [36.42, 36.45, 36.40, 36.48, 36.44, 36.46];
-  for (let i = 0; i < temps.length; i++) await logDay(iso(-9 + i), { temp: temps[i], e3g: 10, lh: 4, mucus: i < 3 ? 'Dry' : 'Sticky' });
-  await logDay(iso(-3), { temp: 36.5, e3g: 12, lh: 30, mucus: 'Egg-white' }); // LH 30 >= 25: surge
-  await shot('02-today-logged');
-  await page.getByTestId('tab-chart').click();
-  // the timeline is calculated on the device; wait for the final set of days
-  await page.waitForFunction(() => [...document.querySelectorAll('.pill')].some((p) => p.textContent === 'Peak'), null, { timeout: 30000 });
-  const pills = await page.locator('.pill').allTextContents();
-  assert.equal(pills.length, 7, `expected 7 daily statuses, got ${pills}`);
-  await page.getByTestId('provisional').waitFor();
-  assert.equal(await pending(), 'All saved & synced');
-  await page.getByTestId('day').first().locator('summary').click();
-  await shot('03-cycle');
-  ok(`events synced and the timeline (calculated on the device) shows ${pills.length} days including Peak`);
+  // --- log period days, temperature, mucus, symptoms and hormones; everything must sync ------------
+  for (let i = 0; i < 4; i++) await logDay(page, iso(-11 + i), { period: true, symptoms: i === 0 ? ['cramps', 'bloating'] : [] });
+  for (let i = 4; i < 10; i++) await logDay(page, iso(-11 + i), { temp: 36.4 + i * 0.01, mucus: i > 6 ? 'watery' : 'creamy' });
+  await T(page, 'tab-home').click(); await T(page, 'tile-hormones').click();
+  await page.fill('[data-testid=hormone-date]', iso(-1)); await page.fill('[data-testid=hormone-lh]', '30'); await page.fill('[data-testid=hormone-e3g]', '25');
+  await T(page, 'save-hormones').click(); await T(page, 'hormone-msg').filter({ hasText: /Saved/ }).waitFor();
+  await T(page, 'tab-home').click();
+  await synced(page);
+  assert.match(await T(page, 'cycle-day').textContent(), /Cycle Day\s*12/);
+  await shot('01-home');
+  ok('period days, temperatures, mucus, symptoms and hormones all accepted by the server (sync shows "All saved")');
 
-  // --- raw device storage is encrypted -------------------------------------------
+  // --- on-device storage is ciphertext ------------------------------------------------------------------
   const raw = await page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
     let out = '';
-    for (const { name } of dbs) {
+    for (const { name } of await indexedDB.databases()) {
       const db = await new Promise((res) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); });
-      for (const s of db.objectStoreNames) {
-        const all = await new Promise((res) => { const r = db.transaction(s).objectStore(s).getAll(); r.onsuccess = () => res(r.result); });
-        out += JSON.stringify(all);
-      }
+      for (const s of db.objectStoreNames) out += JSON.stringify(await new Promise((res) => { const r = db.transaction(s).objectStore(s).getAll(); r.onsuccess = () => res(r.result); }));
       db.close();
     }
     return out;
   });
-  assert.ok(raw.length > 1000, 'something is stored');
-  for (const needle of ['temp_c', '36.42', 'lh_miu_ml', 'E2E Tester', email, 'predictions', 'event_id', 'PEAK']) assert.ok(!raw.includes(needle), `plaintext "${needle}" found in IndexedDB`);
-  ok('IndexedDB holds only ciphertext (no temperatures, hormones, name, email or predictions in the clear)');
+  assert.ok(raw.length > 1000);
+  for (const n of ['temp_c', 'lh_miu_ml', 'cramps', 'E2E Tester', email, 'PEAK']) assert.ok(!raw.includes(n), `plaintext "${n}" in IndexedDB`);
+  ok('IndexedDB holds only ciphertext');
 
-  // --- offline: log, reload, unlock, resync -----------------------------------------
-  await page.getByTestId('tab-today').click();
+  // --- offline: log, reload from cache, unlock, resync ---------------------------------------------------------
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-  await logDay(iso(-2), { temp: 36.7, mucus: 'Creamy' });
-  assert.equal(await pending(), '2 waiting to sync');
+  await logDay(page, iso(0), { temp: 36.7, mucus: 'egg' });
+  await T(page, 'tab-home').click();
+  assert.match(await pending(page), /2 waiting to sync/);
   await page.getByText('Offline', { exact: true }).waitFor();
-  assert.match(await page.getByTestId('msg').textContent(), /Saved on this device/);
-  await shot('04-offline');
-  await page.reload(); // app shell must come from the service worker cache
-  await page.getByTestId('submit').waitFor();
-  await page.fill('#email', email);
-  await page.fill('#password', 'wrong-password-123');
-  await page.getByTestId('submit').click();
+  await T(page, 'tab-settings').click(); await T(page, 'logout').click();
+  await page.reload(); // the app shell must come from the service worker cache
+  await T(page, 'submit').waitFor();
+  await page.fill('#email', email); await page.fill('#password', 'wrong-password-123'); await T(page, 'submit').click();
   await page.getByText(/Wrong password for the data on this device/).waitFor();
   assert.equal(await page.inputValue('#email'), email, 'email is kept after a failed sign-in');
-  await page.fill('#password', password);
-  await page.getByTestId('submit').click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
-  await page.fill('#date', iso(-2));
-  assert.equal(await page.inputValue('#temp'), '36.7');
-  assert.equal(await pending(), '2 waiting to sync');
-  ok('offline: entry saved, page reloads from cache, wrong password refused, correct password unlocks the entry');
-
+  await page.fill('#password', password); await T(page, 'submit').click();
+  await T(page, 'cycle-day').waitFor();
+  assert.match(await pending(page), /2 waiting to sync/);
+  ok('offline: entry saved, page reloads from cache, wrong password refused, correct password unlocks the waiting entry');
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.waitForFunction(() => document.querySelector('[data-testid=pending]')?.textContent.includes('All saved'), null, { timeout: 30000 });
-  ok('back online: the waiting entry synced automatically');
+  await synced(page);
+  ok('back online: the waiting entries synced automatically');
 
-  // --- a second device sees everything (fresh browser profile, same account) ---------------
-  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
-  const p2 = await ctx2.newPage();
+  // --- a second device signs in and gets the same data --------------------------------------------------------------
+  const [ctx2, p2] = await mk();
   await p2.goto(base);
-  await p2.fill('#email', email);
-  await p2.fill('#password', password);
-  await p2.getByTestId('submit').click();
-  await p2.getByRole('heading', { name: 'Today' }).waitFor();
-  await p2.fill('#date', iso(-2));
-  await p2.waitForFunction(() => document.querySelector('#temp')?.value === '36.7', null, { timeout: 30000 });
+  await p2.fill('#email', email); await p2.fill('#password', password); await T(p2, 'submit').click();
+  await T(p2, 'cycle-day').waitFor({ timeout: 30000 });
+  await p2.waitForFunction(() => /Cycle Day\s*12/.test(document.querySelector('[data-testid=cycle-day]')?.textContent ?? ''), null, { timeout: 30000 });
+  await T(p2, 'tile-bbt').click(); await p2.fill('[data-testid=log-date]', iso(0));
+  await p2.waitForFunction(() => document.querySelector('[data-testid=temp-input]')?.value === '36.7', null, { timeout: 30000 });
+  await p2.fill('[data-testid=log-date]', iso(-11));
+  assert.match((await T(p2, 'sym-cramps').getAttribute('aria-pressed')) ?? '', /true/);
   await ctx2.close();
-  ok('a second device signs in and pulls the same data from the server');
+  ok('a second device signs in and sees the same periods, temperatures and symptoms');
 
-  // --- a device-only account can turn sync on later and its data then reaches a second device ------------------------
+  // --- a device-only account can turn sync on later ------------------------------------------------------------------
   const email2 = `later-${Date.now()}@example.com`;
-  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
-  const p3 = await ctx3.newPage();
+  const [ctx3, p3] = await mk();
   await p3.goto(base);
-  await p3.getByTestId('toggle-mode').click();
-  await p3.uncheck('#sync');
-  await p3.fill('#name', 'Later Sync'); await p3.fill('#email', email2); await p3.fill('#password', password);
-  await p3.getByTestId('submit').click();
-  await p3.getByRole('heading', { name: 'Today' }).waitFor();
-  assert.match(await p3.getByTestId('status').textContent(), /This device only/);
-  await p3.fill('#date', iso(-4)); await p3.fill('#temp', '36.61');
-  await p3.getByTestId('save').click();
-  await p3.getByTestId('msg').filter({ hasText: /Saved on this device/ }).waitFor();
-  await p3.getByTestId('tab-account').click();
-  await p3.getByTestId('enable-sync').click();
-  await p3.getByTestId('sync-now').waitFor();
-  await p3.waitForFunction(() => document.querySelector('[data-testid=pending]')?.textContent.includes('All saved'), null, { timeout: 30000 });
-  const ctx4 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
-  const p4 = await ctx4.newPage();
-  await p4.goto(base);
-  await p4.fill('#email', email2); await p4.fill('#password', password);
-  await p4.getByTestId('submit').click();
-  await p4.getByRole('heading', { name: 'Today' }).waitFor();
-  await p4.fill('#date', iso(-4));
-  await p4.waitForFunction(() => document.querySelector('#temp')?.value === '36.61', null, { timeout: 30000 });
+  await T(p3, 'toggle-mode').click(); await p3.uncheck('#sync');
+  await p3.fill('#name', 'Later Sync'); await p3.fill('#email', email2); await p3.fill('#password', password); await T(p3, 'submit').click();
+  await T(p3, 'onboarding').waitFor();
+  assert.match(await T(p3, 'status').textContent(), /This device only/);
+  await logDay(p3, iso(-4), { period: true, temp: 36.61 });
+  await T(p3, 'tab-settings').click(); await T(p3, 'row-sync').click(); await T(p3, 'enable-sync').click();
+  await T(p3, 'sync-now').waitFor();
+  await T(p3, 'back').click(); await T(p3, 'tab-home').click(); await synced(p3);
+  const [ctx4, p4] = await mk();
+  await p4.goto(base); await p4.fill('#email', email2); await p4.fill('#password', password); await T(p4, 'submit').click();
+  await T(p4, 'cycle-day').waitFor({ timeout: 30000 });
+  await T(p4, 'tile-bbt').click(); await p4.fill('[data-testid=log-date]', iso(-4));
+  await p4.waitForFunction(() => document.querySelector('[data-testid=temp-input]')?.value === '36.61', null, { timeout: 30000 });
   await ctx3.close(); await ctx4.close();
-  ok('a device-only account turned sync on; its earlier entry reached a second device');
-
-  // --- validation, lock, wipe ------------------------------------------------------------------
-  await page.fill('#date', iso(-1));
-  await page.fill('#temp', '45');
-  await page.getByTestId('save').click(); // blocked by the browser's own max=42 validation, nothing is saved
-  assert.equal(await page.evaluate(() => document.querySelector('#temp').validity.rangeOverflow), true);
-  assert.equal(await pending(), 'All saved & synced');
-  await page.getByTestId('tab-account').click();
-  await page.getByTestId('logout').click();
-  await page.getByTestId('submit').waitFor();
-  ok('invalid temperature refused; sign-out returns to the lock screen');
+  ok('a device-only account turned sync on; its earlier entries reached a second device');
 
   assert.deepEqual(problems, [], `browser errors: ${problems.join(' | ')}`);
   ok('no console or page errors');

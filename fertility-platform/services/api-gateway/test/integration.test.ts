@@ -386,6 +386,25 @@ suite('integration: Postgres RLS + real Python engine', () => {
     });
   });
 
+  describe('period and symptom entries', () => {
+    it('are stored, ignored by the engine as biomarkers, and shape the cycle window', async () => {
+      const period1 = ev('PERIOD', 1, {}, { log_date: '2025-04-01' });
+      const period2 = ev('PERIOD', 2, {}, { log_date: '2025-04-02' });
+      const symptom = ev('SYMPTOMS', 2, { tags: ['cramps', 'bloating'] }, { log_date: '2025-04-02' });
+      const temp = ev('BBT', 3, { temp_c: 36.55 }, { log_date: '2025-04-03' });
+      const res = await post('/api/v1/sync/push', tok(IDS.patientB, 'patient'), { events: [period1, period2, symptom, temp] });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().accepted).toHaveLength(4);
+      const kinds = await q<{ kind: string }>('SELECT kind FROM clinical_data.biomarker_events WHERE event_id = ANY($1::uuid[]) ORDER BY kind', [[period1, period2, symptom, temp].map((e) => e.event_id)]);
+      expect(kinds.map((k) => k.kind)).toEqual(['BBT', 'PERIOD', 'PERIOD', 'SYMPTOMS']);
+      await worker.drain();
+      const r = await app.inject({ method: 'GET', url: '/api/v1/sync/pull?limit=500', headers: tok(IDS.patientB, 'patient') });
+      const days = r.json().predictions.days.map((d: { log_date: string }) => d.log_date);
+      expect(days).toEqual(['2025-04-03']); // the cycle starts on the first period day; only the temperature is analysed
+      await expect(db.admin.query("INSERT INTO clinical_data.biomarker_events (subject_id, event_id, device_id, lamport, client_ts, kind, op, log_date, payload, payload_hash) VALUES (repeat('c',64), gen_random_uuid(), gen_random_uuid(), 1, now(), 'DIARY', 'SET', '2025-04-01', '{}', repeat('0',64))")).rejects.toThrow(/kind_check/);
+    });
+  });
+
   describe('GDPR erasure', () => {
     it('erase_subject removes a subject\'s PHI (break-glass function, not callable by the app)', async () => {
       await expect(phiPool.query('SELECT clinical_data.erase_subject($1)', [subjectA])).rejects.toThrow(/permission denied/);

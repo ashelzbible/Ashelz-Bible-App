@@ -1,5 +1,5 @@
-// Browser test of the app with NO server at all: only static files are served. Everything (accounts, storage,
-// fertility calculations) must work on the device alone, and nothing may be sent to an API.
+// Browser test of the whole interface with NO server at all: only static files are served. Everything (accounts,
+// storage, fertility calculations, estimates) must work on the device alone and nothing may call an API.
 // Usage: node scripts/e2e-local.mjs http://127.0.0.1:8085 [screenshot-dir]    (start:  node scripts/serve-static.mjs 8085)
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -21,60 +21,165 @@ const problems = [], apiCalls = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error' && !/ERR_INTERNET_DISCONNECTED|ERR_FAILED|status of 404/.test(m.text())) problems.push(`console: ${m.text()}`); });
 page.on('request', (r) => { if (new URL(r.url()).pathname.startsWith('/api/')) apiCalls.push(r.url()); });
+page.on('dialog', (d) => d.accept());
 const shot = async (n) => { if (shots) await page.screenshot({ path: `${shots}/${n}.png` }); };
-async function logDay(date, f = {}) {
-  await page.fill('#date', date);
-  if (f.temp !== undefined) await page.fill('#temp', String(f.temp));
-  if (f.lh !== undefined) await page.fill('#lh', String(f.lh));
-  if (f.e3g !== undefined) await page.fill('#e3g', String(f.e3g));
-  if (f.mucus) await page.getByText(f.mucus, { exact: true }).click();
-  await page.getByTestId('save').click();
-  await page.getByTestId('msg').filter({ hasText: /Saved/ }).waitFor();
-}
-const pills = () => page.locator('.pill').allTextContents();
+const T = (id) => page.getByTestId(id);
+const tab = async (id) => { await T(`tab-${id}`).click(); };
 
+/** Log one day through the real Log Your Day screen. */
+async function logDay(date, f = {}) {
+  await page.fill('[data-testid=log-date]', date);
+  if (f.period) await T('period-yes').click();
+  if (f.temp !== undefined) await page.fill('[data-testid=temp-input]', String(f.temp));
+  if (f.mucus) await T(`mucus-${f.mucus}`).click();
+  for (const s of f.symptoms ?? []) await T(`sym-${s}`).click();
+  await T('save-day').click();
+  await T('log-msg').filter({ hasText: /Saved/ }).waitFor();
+}
 try {
+  // ---- static files only: no server offered ------------------------------------------------------------------
   await page.goto(base);
   await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.getByTestId('toggle-mode').click();
+  await shot('01-login');
+  await T('toggle-mode').click();
   await page.getByText(/No server needed/).waitFor();
   assert.equal(await page.locator('#sync').count(), 0, 'no sync option without a server');
-  await shot('01-register');
-  ok('static files only: the sign-up form says no server is needed and offers no sync');
+  await page.fill('#name', 'Ashlyn De Koe'); await page.fill('#email', email); await page.fill('#password', password);
+  await T('submit').click();
+  await T('onboarding').waitFor();
+  assert.match(await T('status').textContent(), /This device only/);
+  await shot('02-home-empty');
+  ok('no server needed: account created on the device; Home asks for the first period');
 
-  await page.fill('#name', 'Local Tester'); await page.fill('#email', email); await page.fill('#password', password);
-  await page.getByTestId('submit').click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
-  assert.match(await page.getByTestId('status').textContent(), /This device only/);
-  ok('account created entirely on the device');
+  // ---- log three cycles through the real screens -----------------------------------------------------------------
+  await T('start-period').click();
+  await T('save-day').waitFor();
+  const starts = [-69, -40, -11];
+  for (const s of starts) for (let i = 0; i < 4; i++) {
+    await logDay(iso(s + i), { period: true, symptoms: i === 0 ? ['cramps'] : [] });
+  }
+  // temperatures, mucus and hormones across the current cycle (days -11..0)
+  const temps = [36.42, 36.45, 36.4, 36.48, 36.44, 36.46, 36.43, 36.45, 36.62, 36.7, 36.72, 36.75];
+  const mucus = ['dry', 'dry', 'creamy', 'creamy', 'creamy', 'watery', 'watery', 'egg', 'egg', 'creamy', 'dry', 'dry'];
+  for (let i = 0; i < 12; i++) {
+    await page.fill('[data-testid=log-date]', iso(-11 + i));
+    await page.fill('[data-testid=temp-input]', String(temps[i]));
+    await T(`mucus-${mucus[i]}`).click();
+    await T('save-day').click();
+    await T('log-msg').filter({ hasText: /Saved|Nothing changed/ }).waitFor();
+  }
+  await tab('home'); await T('tile-hormones').click(); // stay on the Hormones screen and step through the days
+  for (let i = 0; i < 12; i++) { // LH 30 on day -3: the peak
+    const lh = i === 8 ? 30 : 4, e3g = i >= 6 && i <= 8 ? 24 : 10;
+    await page.fill('[data-testid=hormone-date]', iso(-11 + i));
+    await page.fill('[data-testid=hormone-lh]', String(lh));
+    await page.fill('[data-testid=hormone-e3g]', String(e3g));
+    await T('save-hormones').click();
+    await T('hormone-msg').filter({ hasText: /Saved/ }).waitFor();
+  }
+  await tab('home');
+  ok('three cycles, 12 days of temperature, mucus, symptoms and hormones logged through the screens');
 
-  const temps = [36.42, 36.45, 36.40, 36.48, 36.44, 36.46];
-  for (let i = 0; i < temps.length; i++) await logDay(iso(-9 + i), { temp: temps[i], e3g: 10, lh: 4, mucus: i < 3 ? 'Dry' : 'Sticky' });
-  await logDay(iso(-3), { temp: 36.5, e3g: 12, lh: 30, mucus: 'Egg-white' });
-  await page.getByTestId('tab-chart').click();
-  await page.getByTestId('day').first().waitFor();
-  const p = await pills();
-  assert.equal(p.length, 7); assert.ok(p.includes('Peak'), `expected Peak in ${p}`);
-  assert.match(await page.getByTestId('computed').textContent(), /on this device/);
-  await page.getByTestId('day').first().locator('summary').click();
-  await shot('02-cycle');
-  ok('the fertility timeline is calculated on the device immediately (7 days, includes Peak)');
+  // ---- Home ---------------------------------------------------------------------------------------------------------
+  await T('cycle-day').waitFor();
+  assert.match(await T('cycle-day').textContent(), /Cycle Day\s*12\s*of 29/);
+  assert.match(await T('next-period').textContent(), /Next Period in 18 Days/);
+  assert.match(await T('next-period').textContent(), /estimate/);
+  assert.match(await T('ovulation-card').textContent(), /Ovulation/);
+  assert.match(await T('fertility-window').textContent(), /Fertility Window/);
+  await shot('03-home');
+  ok('Home: cycle day 12 of 29 (from two completed cycles), next period and ovulation shown as estimates');
 
-  await page.getByTestId('tab-account').click();
-  assert.match(await page.getByTestId('device-only').textContent(), /only on this device/);
-  assert.equal(await page.getByTestId('enable-sync').count(), 0, 'no sync button when there is no server');
-  await page.getByTestId('profile-select').selectOption('mira-marquette-2021-preliminary');
-  await page.getByText('Where these numbers come from').click();
-  assert.match(await page.getByTestId('evidence').textContent(), /PRELIMINARY/);
-  await page.getByTestId('tab-chart').click();
-  assert.match(await page.getByTestId('computed').textContent(), /mira-marquette-2021-preliminary/);
-  assert.match(await page.getByTestId('provisional').textContent(), /provisional/);
-  // same pills for this data, but the reasoning now cites the Mira rule (a candidate peak needing two lower days)
-  await page.getByTestId('day').first().locator('summary').click();
-  assert.match(await page.getByTestId('day').first().textContent(), /candidate peak confirmed when 2 consecutive days follow at least 50% lower/);
-  await shot('03-mira');
-  ok('switching to the Mira threshold set recalculates the timeline on the device');
+  // ---- Calendar -------------------------------------------------------------------------------------------------------
+  await tab('calendar');
+  assert.match(await T(`cal-day-${iso(-10)}`).getAttribute('class'), /period/);
+  assert.match(await T(`cal-day-${iso(0)}`).getAttribute('class'), /today/);
+  assert.match(await T('cycle-overview').textContent(), /29 Days/);
+  assert.match(await T('cycle-overview').textContent(), /Normal Cycle/);
+  await shot('04-calendar');
+  await T('cal-prev').click();
+  await T('cal-next').click();
+  await T(`cal-day-${iso(-8)}`).click();
+  await T('save-day').waitFor();
+  assert.equal(await page.inputValue('[data-testid=log-date]'), iso(-8));
+  assert.equal(await page.inputValue('[data-testid=temp-input]'), String(temps[3]));
+  await T('back').click();
+  ok('Calendar: logged period days, today, cycle overview; tapping a day opens it with its saved values');
 
+  // ---- Log screen details: units, stepper, validation, symptoms -----------------------------------------------------------
+  await tab('settings'); await T('row-units').click(); await T('unit-F').click();
+  await T('back').click(); await T('tab-home').click(); await T('tile-bbt').click();
+  await page.fill('[data-testid=log-date]', iso(-8));
+  assert.equal(await page.inputValue('[data-testid=temp-input]'), '97.7'); // 36.48 C
+  await T('temp-plus').click();
+  assert.equal(await page.inputValue('[data-testid=temp-input]'), '97.8');
+  await page.fill('[data-testid=temp-input]', '120');
+  await T('save-day').click();
+  await T('log-msg').filter({ hasText: /does not look right/ }).waitFor();
+  await page.fill('[data-testid=temp-input]', '97.9');
+  await T('save-day').click();
+  await T('log-msg').filter({ hasText: /Saved/ }).waitFor();
+  await T('back').click();
+  await tab('settings'); await T('row-units').click(); await T('unit-C').click();
+  await T('back').click(); await tab('home'); await T('tile-bbt').click();
+  await page.fill('[data-testid=log-date]', iso(-8));
+  assert.equal(await page.inputValue('[data-testid=temp-input]'), '36.61'); // stored in C: 97.9 F
+  await T('temp-minus').click();
+  assert.equal(await page.inputValue('[data-testid=temp-input]'), '36.56');
+  await shot('05-log');
+  ok('Log: °F entry is stored in °C, converts back, stepper and range check work');
+  await T('back').click();
+
+  // ---- Charts ------------------------------------------------------------------------------------------------------------------
+  await tab('charts');
+  await T('bbt-chart').waitFor(); await T('hormone-chart').waitFor();
+  await T(`bbt-pt-${iso(-8)}`).click();
+  assert.match(await T('bbt-tip').textContent(), /CD 4/);
+  await T('range-3M').click(); await T('bbt-chart').waitFor();
+  await T('range-Custom').click(); await T('custom-from').waitFor();
+  await page.fill('[data-testid=custom-from]', iso(-12)); await T('bbt-chart').waitFor();
+  await T('range-1M').click();
+  assert.match(await T('fertile-days').textContent(), /measured/);
+  await T('day').first().waitFor();
+  await shot('06-charts');
+  ok('Charts: BBT and hormone charts, point details with cycle day, ranges incl. custom, measured fertile days');
+
+  // ---- History --------------------------------------------------------------------------------------------------------------------
+  await tab('history');
+  assert.match(await T('cycle-current').textContent(), /Day 12 of ~29/);
+  assert.equal(await T('cycle-prev-0').count(), 1); assert.equal(await T('cycle-prev-1').count(), 1);
+  assert.match(await T('cycle-prev-0').textContent(), /29 Days/);
+  assert.match(await T('insights').textContent(), /consistent \(29 days\)/);
+  await shot('07-history');
+  ok('History: current and previous cycles with lengths, and insights');
+
+  // ---- Settings ----------------------------------------------------------------------------------------------------------------------
+  await tab('settings');
+  await T('edit-profile').click(); await page.fill('[data-testid=profile-input]', 'Ashlyn Test'); await T('save-profile').click();
+  await T('settings-msg').filter({ hasText: 'Saved' }).waitFor(); await T('back').click();
+  assert.equal((await T('profile-name').textContent()), 'Ashlyn Test');
+  await T('row-sync').click(); assert.match(await T('device-only').textContent(), /only on this device/);
+  assert.equal(await T('enable-sync').count(), 0); await T('back').click();
+  await T('row-notifications').click(); await T('reminder-toggle').check();
+  await T('settings-msg').filter({ hasText: /only work in the Android app/ }).waitFor(); await T('back').click();
+  await T('row-cycle').click();
+  await page.fill('[data-testid=pref-cycleLength]', '60'); await page.locator('[data-testid=pref-cycleLength]').blur();
+  await T('settings-msg').filter({ hasText: /whole number from 21 to 45/ }).waitFor();
+  await page.fill('[data-testid=pref-cycleLength]', '31'); await page.locator('[data-testid=pref-cycleLength]').blur();
+  await T('settings-msg').filter({ hasText: 'Saved' }).waitFor();
+  await T('profile-select').selectOption('mira-marquette-2021-preliminary');
+  await page.waitForFunction(() => document.querySelector('[data-testid=evidence]')?.textContent.includes('PRELIMINARY'));
+  await T('profile-select').selectOption('spec-provisional-1');
+  await page.waitForFunction(() => document.querySelector('[data-testid=evidence]')?.textContent.includes('Ecochard 2013'));
+  await T('pref-goal').selectOption('conceive');
+  await T('back').click();
+  for (const r of ['privacy', 'help', 'about']) { await T(`row-${r}`).click(); await T('screen-title').waitFor(); await T('back').click(); }
+  await shot('08-settings');
+  await tab('home');
+  assert.match(await T('cycle-day').textContent(), /of 29/, 'the typical length setting does not override your own history');
+  ok('Settings: profile, sync, reminders (browser limits stated), preferences with validation, thresholds, privacy, help, about');
+
+  // ---- storage is ciphertext ----------------------------------------------------------------------------------------------------------
   const raw = await page.evaluate(async () => {
     let out = '';
     for (const { name } of await indexedDB.databases()) {
@@ -84,26 +189,25 @@ try {
     }
     return out;
   });
-  for (const n of ['temp_c', 'lh_miu_ml', 'Local Tester', email, 'PEAK', 'mira-marquette']) assert.ok(!raw.includes(n), `plaintext "${n}" in IndexedDB`);
-  ok('everything on the device is ciphertext');
+  for (const n of ['temp_c', 'lh_miu_ml', 'cramps', 'Ashlyn', email, 'PEAK', 'PERIOD']) assert.ok(!raw.includes(n), `plaintext "${n}" in IndexedDB`);
+  ok('everything on the device is ciphertext (temperatures, hormones, symptoms, name, email, results)');
 
-  await page.getByTestId('tab-account').click();
-  await page.getByTestId('logout').click();
+  // ---- offline reload, wrong password, remembered settings -----------------------------------------------------------------------------------
+  await tab('settings'); await T('logout').click();
   await context.setOffline(true);
   await page.reload();
-  await page.getByTestId('submit').waitFor();
-  await page.fill('#email', email); await page.fill('#password', 'wrong-password-123'); await page.getByTestId('submit').click();
+  await T('submit').waitFor();
+  await page.fill('#email', email); await page.fill('#password', 'wrong-password-123'); await T('submit').click();
   await page.getByText(/Wrong password for the data on this device/).waitFor();
-  await page.fill('#password', password); await page.getByTestId('submit').click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
-  await page.getByTestId('tab-chart').click();
-  await page.getByTestId('day').first().waitFor();
-  assert.match(await page.getByTestId('computed').textContent(), /mira-marquette-2021-preliminary/, 'the chosen threshold set is remembered');
-  ok('offline reload from cache, wrong password refused, data and threshold choice restored');
+  await page.fill('#password', password); await T('submit').click();
+  await T('cycle-day').waitFor();
+  assert.match(await T('cycle-day').textContent(), /Cycle Day\s*12/);
+  await tab('settings'); assert.equal(await T('profile-name').textContent(), 'Ashlyn Test');
   await context.setOffline(false);
+  ok('offline reload from cache, wrong password refused, data, name and preferences restored');
 
-  await page.getByTestId('tab-account').click(); await page.getByTestId('logout').click();
-  await page.fill('#email', 'nobody@example.com'); await page.fill('#password', password); await page.getByTestId('submit').click();
+  await T('logout').click();
+  await page.fill('#email', 'nobody@example.com'); await page.fill('#password', password); await T('submit').click();
   await page.getByText(/No account with this email on this device/).waitFor();
   ok('an unknown email is refused (there is no server to look it up)');
 

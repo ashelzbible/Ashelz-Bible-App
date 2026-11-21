@@ -1,8 +1,41 @@
 // Service worker: the app shell works offline (stale-while-revalidate); API calls are never cached.
-const CACHE = 'cycle-demo-shell-v2';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/lib/store.js', '/lib/api.js', '/lib/sync.js', '/lib/view.js', '/lib/engine/rational.js', '/lib/engine/profiles.js', '/lib/engine/engine.js', '/lib/engine/window.js', '/lib/engine/index.js',
-  '/vendor/sync-protocol/clock.js', '/vendor/sync-protocol/order.js', '/vendor/sync-protocol/canonical.js',
-  '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const CACHE = 'cycle-demo-shell-v3';
+const SHELL = [
+  '/',
+  '/index.html',
+  '/styles.css',
+  '/app.js',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+  '/lib/store.js',
+  '/lib/api.js',
+  '/lib/sync.js',
+  '/lib/notify.js',
+  '/lib/ui/dom.js',
+  '/lib/ui/icons.js',
+  '/lib/ui/kit.js',
+  '/lib/ui/home.js',
+  '/lib/ui/calendar.js',
+  '/lib/ui/log.js',
+  '/lib/ui/charts.js',
+  '/lib/ui/history.js',
+  '/lib/ui/settings.js',
+  '/lib/ui/login.js',
+  '/lib/domain/dates.js',
+  '/lib/domain/units.js',
+  '/lib/domain/cycles.js',
+  '/lib/domain/forecast.js',
+  '/lib/engine/rational.js',
+  '/lib/engine/profiles.js',
+  '/lib/engine/engine.js',
+  '/lib/engine/window.js',
+  '/lib/engine/index.js',
+  '/vendor/sync-protocol/clock.js',
+  '/vendor/sync-protocol/order.js',
+  '/vendor/sync-protocol/canonical.js'
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

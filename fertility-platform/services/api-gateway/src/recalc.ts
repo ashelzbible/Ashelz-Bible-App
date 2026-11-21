@@ -9,7 +9,7 @@ const LOCK_MINUTES = 5;
 const MAX_ATTEMPTS = 8;
 
 export interface EffectiveRow {
-  kind: 'BBT' | 'HORMONE' | 'MUCUS' | 'CYCLE';
+  kind: 'BBT' | 'HORMONE' | 'MUCUS' | 'CYCLE' | 'PERIOD' | 'SYMPTOMS';
   log_date: string; // YYYY-MM-DD
   payload: Record<string, unknown>;
 }
@@ -19,19 +19,38 @@ function shiftDays(isoDate: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** A period day starts a new cycle unless another period day fell within this many days before it. */
+export const PERIOD_GAP_DAYS = 10;
+const BIOMARKER = new Set(['BBT', 'HORMONE', 'MUCUS']);
+const WINDOW_KINDS = new Set(['BBT', 'HORMONE', 'MUCUS', 'CYCLE', 'PERIOD']);
+
+/** Cycle starts: explicit CYCLE dates plus the first day of each run of PERIOD days. */
+export function cycleStartDates(rows: readonly EffectiveRow[]): string[] {
+  const period = new Set(rows.filter((r) => r.kind === 'PERIOD').map((r) => r.log_date));
+  const starts = new Set(rows.filter((r) => r.kind === 'CYCLE').map((r) => r.log_date));
+  for (const d of period) {
+    let recent = false;
+    for (let k = 1; k <= PERIOD_GAP_DAYS && !recent; k++) recent = period.has(shiftDays(d, -k));
+    if (!recent) starts.add(d);
+  }
+  return [...starts].sort();
+}
+
 /**
  * Turn a subject's effective event state into one engine request covering the
- * current cycle: from the latest CYCLE start on/before the last datum (or the
+ * current cycle: from the latest cycle start on/before the last datum (or the
  * last 90 days if none is logged), never longer than the engine's 366-day
- * limit. Returns null when the window holds no biomarker data, in which case
- * existing predictions are kept untouched.
+ * limit. Only temperature, hormone and mucus entries are sent to the engine;
+ * period days only decide where the cycle starts. Returns null when the window
+ * holds no biomarker data, in which case existing predictions are kept untouched.
  */
-export function buildAnalyzeRequest(rows: readonly EffectiveRow[]): { request: AnalyzeRequest; windowStart: string } | null {
-  const biomarker = rows.filter((r) => r.kind !== 'CYCLE');
+export function buildAnalyzeRequest(allRows: readonly EffectiveRow[]): { request: AnalyzeRequest; windowStart: string } | null {
+  const rows = allRows.filter((r) => WINDOW_KINDS.has(r.kind));
+  const biomarker = rows.filter((r) => BIOMARKER.has(r.kind));
   if (biomarker.length === 0) return null;
 
   const latest = rows.reduce((m, r) => (r.log_date > m ? r.log_date : m), '0000-00-00');
-  const starts = rows.filter((r) => r.kind === 'CYCLE' && r.log_date <= latest).map((r) => r.log_date).sort();
+  const starts = cycleStartDates(rows).filter((d) => d <= latest);
   const cycleStart = starts[starts.length - 1] ?? shiftDays(latest, -(DEFAULT_WINDOW_DAYS - 1));
   const floor = shiftDays(latest, -(MAX_WINDOW_DAYS - 1));
   const windowStart = cycleStart > floor ? cycleStart : floor;
