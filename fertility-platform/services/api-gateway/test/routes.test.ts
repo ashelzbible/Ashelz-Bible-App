@@ -212,7 +212,7 @@ describe('operations', () => {
   it('rate limits per client', async () => {
     const limited = await buildApp({ config: testConfig({ RATE_LIMIT_PER_MINUTE: '3' }), store });
     const codes: number[] = [];
-    for (let i = 0; i < 5; i++) codes.push((await limited.inject({ method: 'GET', url: '/healthz' })).statusCode);
+    for (let i = 0; i < 5; i++) codes.push((await limited.inject({ method: 'GET', url: '/readyz' })).statusCode);
     await limited.close();
     expect(codes).toEqual([200, 200, 200, 429, 429]);
   });

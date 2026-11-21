@@ -5,6 +5,7 @@ import { hashIp, pseudonymize } from '../src/crypto.js';
 import { createPool } from '../src/db.js';
 import { EngineRejectedError, HttpEngineClient, type EngineClient } from '../src/engine-client.js';
 import { IdentityStore } from '../src/identity-store.js';
+import { StoreIdentityService } from '../src/identity-service.js';
 import { RecalcWorker } from '../src/recalc.js';
 import { buildApp } from '../src/server.js';
 import { PgPhiStore } from '../src/store.js';
@@ -95,6 +96,21 @@ suite('integration: Postgres RLS + real Python engine', () => {
       const other = await ids.createUser({ full_name: 'Other Person', email: 'other@example.com' }, 'patient');
       await q('UPDATE identity_vault.users SET encrypted_pii = $1 WHERE user_id = $2', [row!.encrypted_pii, other]);
       await expect(ids.getUser(other)).rejects.toThrow(/decryption failed/);
+    });
+
+    it('registers and signs in with a scrypt-hashed password; no password or name is stored in the clear', async () => {
+      const svc = new StoreIdentityService(new IdentityStore(identityPool, cfg.fieldEncryptionKey, cfg.emailHashKey));
+      const created = await svc.register('Login.Test@Example.com', 'a-long-enough-pass', 'Login Test');
+      expect(created).toMatchObject({ userId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+      expect(await svc.register('login.test@example.com', 'another-long-pass', 'Dup')).toBe('exists');
+      const uid = (created as { userId: string }).userId;
+      expect(await svc.authenticate('LOGIN.test@example.com', 'a-long-enough-pass')).toEqual({ userId: uid, role: 'patient' });
+      expect(await svc.authenticate('login.test@example.com', 'wrong-password!!')).toBeNull();
+      expect(await svc.authenticate('nobody@example.com', 'a-long-enough-pass')).toBeNull();
+      const [row] = await q<{ password_hash: string; encrypted_pii: string }>('SELECT password_hash, encrypted_pii FROM identity_vault.users WHERE user_id = $1', [uid]);
+      expect(row!.password_hash).toMatch(/^scrypt\$/);
+      expect(JSON.stringify(row)).not.toContain('a-long-enough-pass');
+      expect(JSON.stringify(row)).not.toContain('Login Test');
     });
 
     it('the PHI login role cannot read the vault, and the identity role cannot read PHI', async () => {

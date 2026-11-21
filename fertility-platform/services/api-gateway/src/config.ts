@@ -38,6 +38,13 @@ const schema = z.object({
   /** Named assay profile the recalculation worker asks the engine to use (e.g. mira-marquette-2021-preliminary). */
   ASSAY_PROFILE: z.string().regex(/^[a-z0-9._-]+$/i, 'ASSAY_PROFILE must be a profile name').default('spec-provisional-1'),
 
+  /** Access-token lifetime, e.g. 15m, 1h, 12h. */
+  TOKEN_TTL: z.string().regex(/^\d+[smhd]$/, 'TOKEN_TTL must look like 15m, 1h or 7d').default('1h'),
+  /** Run the recalculation worker inside the API process (single-container demo deployments). */
+  RUN_WORKER: z.enum(['true', 'false']).default('false'),
+  /** Directory of the installable web app to serve at /. Unset = API only. */
+  PWA_DIR: z.string().optional(),
+
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(120),
 });
 
@@ -59,6 +66,9 @@ export interface Config {
   engineUrl: string;
   engineToken: string;
   assayProfile: string;
+  tokenTtl: string;
+  runWorker: boolean;
+  pwaDir?: string;
   rateLimitPerMinute: number;
 }
 
@@ -103,6 +113,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     engineUrl: e.ENGINE_URL,
     engineToken: e.ENGINE_TOKEN,
     assayProfile: e.ASSAY_PROFILE,
+    tokenTtl: e.TOKEN_TTL,
+    runWorker: e.RUN_WORKER === 'true',
+    pwaDir: e.PWA_DIR,
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
   };
 }

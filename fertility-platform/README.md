@@ -8,6 +8,8 @@ important — what does **not** exist yet.
 services/biochem-engine/   Python 3.12+ · FastAPI · pure deterministic calculation core
 services/api-gateway/      Node 22 · Fastify · Zod · JWT · RBAC · audit · sync endpoints · recalc worker
 packages/sync-protocol/    Shared TypeScript: event schemas, Lamport clock, deterministic ordering
+apps/pwa/                  Installable offline-first web app (demo phone app), served by the API
+deploy/ · Dockerfile · render.yaml   Single-container demo deployment (provisioning, key derivation, Render blueprint)
 infrastructure/db/         PostgreSQL migrations (PII / PHI / audit zones, RLS) + adversarial SQL tests
 ```
 
@@ -144,6 +146,7 @@ node services/api-gateway/dist/worker-main.js            # recalculation worker
 
 | Method & path | Roles | Notes |
 |---|---|---|
+| `POST /api/v1/auth/register` · `POST /api/v1/auth/login` | public | scrypt-hashed passwords; sign-up always creates a patient; 10 attempts/min/IP; returns a short-lived JWT |
 | `POST /api/v1/sync/push` | patient | ≤ 500 events; returns `accepted / duplicates / conflicts / server_lamport` |
 | `GET  /api/v1/sync/pull?cursor&limit[&patient_id]` | patient; clinician (needs `patient_id` + consent) | events after cursor; latest predictions on the final page |
 | `POST /api/v1/consents` · `DELETE /api/v1/consents/:clinicianId` | patient | grant / revoke clinician access |
@@ -152,13 +155,47 @@ node services/api-gateway/dist/worker-main.js            # recalculation worker
 Event kinds: `BBT`, `HORMONE`, `MUCUS`, `CYCLE` (period start — bounds the engine's analysis window);
 ops `SET` / `RETRACT`.
 
+## Hosted demo and phone app
+
+The repo includes an installable **web app (PWA)** in `apps/pwa/` that the API serves at `/`, and a one-click
+**Render** blueprint. It is a *demo*: free hosting sleeps when idle, and nothing here is validated for real
+health data (the page says so).
+
+**Deploy (you need a Render account; I could not create the live URL for you):**
+1. Render dashboard → **New → Blueprint** → select this GitHub repo and the branch to deploy.
+2. Set the blueprint path to **`fertility-platform/render.yaml`**. It creates one Docker web service and one
+   Postgres database; `MASTER_SECRET` is generated for you and every key and database password is derived from it.
+3. When the deploy is live, open the `https://….onrender.com` address (first load after idle can take a minute).
+
+**Install on a phone** (needs the https address): Android Chrome → menu → *Install app*; iPhone Safari →
+Share → *Add to Home Screen*. It then opens full-screen, works offline, and syncs when back online.
+
+**How it works:** one container runs provisioning (`deploy/provision.mjs`: migrations, then the three restricted
+database roles), the Python engine, and the Node API, which also serves the app and runs the recalculation
+worker. The database owner login is used only for provisioning; the app connects as the restricted roles.
+Try the Mira thresholds by setting `ASSAY_PROFILE=mira-marquette-2021-preliminary` (preliminary, see above).
+
+**The web app vs the final design:** on-device data is AES-256-GCM encrypted in IndexedDB under a key derived from
+the user's password (PBKDF2), so it cannot be reset — a forgotten password means the on-device copy is
+unrecoverable (the synced server copy remains). The production design calls for React Native with SQLCipher; this
+PWA shares the real sync protocol, Lamport ordering code and server API, but not the storage layer.
+
+**Verified here:** the full path (provisioning as a non-superuser `CREATEROLE` login, key derivation, start script,
+API + app + worker + engine) was run natively, and `node scripts/e2e-pwa.mjs <url>` drives it in a real phone-sized
+browser: register, log days, server predictions, offline logging, offline reload and unlock, resync, a second
+device, and ciphertext-only on-device storage (9 checks).
+**Not verified:** the `Dockerfile` and `render.yaml` themselves were not built or deployed (no Docker daemon was
+available, and I have no Render access). Expect to fix small things on the first deploy — most likely in the
+Render database permissions (the provisioner needs a database login that can create roles; it says so if not).
+
 ## Not built yet (be aware before relying on this)
 
-* **No login / token issuance.** The gateway *verifies* HS256 JWTs (`exp`, `iss`, `aud` required) from an
-  identity service; `IdentityStore` (encrypted PII, e-mail hash) exists, the HTTP service around it does not.
-* **No mobile app or clinic dashboard** (roadmap phase 3), **no Cloudflare/AWS gateway config**, no
-  Dockerfiles/compose, no CI workflow. TLS 1.3 is assumed to terminate at the edge.
-* **No key management.** Keys come from the environment; there is no KMS integration or rotation
+* **No password reset or e-mail verification**, no refresh tokens (access tokens last `TOKEN_TTL`, default 1 h; the
+  web app silently signs in again while open), and no account lockout beyond the per-IP rate limit.
+  Clinician and admin accounts cannot self-register and there is no UI for provisioning them.
+* **No React Native app and no clinic dashboard** (roadmap phase 3); the demo web app is patient-only. No
+  Cloudflare/AWS gateway config and no CI workflow. TLS 1.3 is assumed to terminate at the edge.
+* **No key management.** Keys come from the environment (the demo derives all of them from one `MASTER_SECRET`); there is no KMS integration or rotation
   (the `v1:` ciphertext envelope has no key id yet).
 * **Audit log is tamper-resistant, not tamper-proof**: a database superuser could still drop its triggers.
   A hash chain / external WORM sink would close that.

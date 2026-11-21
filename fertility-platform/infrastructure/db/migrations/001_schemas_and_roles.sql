@@ -20,6 +20,20 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Migration 003 hands a function to phi_erasure (ALTER ... OWNER TO), which requires the migrating role to be
+-- able to SET ROLE to it. A superuser always can; a CREATEROLE login on managed Postgres (PostgreSQL 16+)
+-- is no longer granted that automatically for roles it creates, so grant it explicitly.
+DO $$
+BEGIN
+  IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+    IF current_setting('server_version_num')::int >= 160000 THEN
+      EXECUTE format('GRANT phi_erasure TO %I WITH SET TRUE, INHERIT FALSE', current_user);
+    ELSE
+      EXECUTE format('GRANT phi_erasure TO %I', current_user);
+    END IF;
+  END IF;
+END $$;
+
 CREATE SCHEMA IF NOT EXISTS identity_vault;
 CREATE SCHEMA IF NOT EXISTS clinical_data;
 CREATE SCHEMA IF NOT EXISTS audit;

@@ -114,4 +114,8 @@ BEGIN
   RETURN n;
 END $$;
 REVOKE ALL ON FUNCTION clinical_data.erase_subject(clinical_data.subject_id) FROM PUBLIC;
+-- The new owner needs CREATE on the schema while ownership moves (a non-superuser migrator is not exempt);
+-- grant it only for this statement.
+GRANT CREATE ON SCHEMA clinical_data TO phi_erasure;
 ALTER FUNCTION clinical_data.erase_subject(clinical_data.subject_id) OWNER TO phi_erasure;
+REVOKE CREATE ON SCHEMA clinical_data FROM phi_erasure;

@@ -1,0 +1,17 @@
+{
+  "name": "Cycle Tracker Demo",
+  "short_name": "Cycle Demo",
+  "description": "Offline-first cycle and fertility tracker (demo)",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf7fc",
+  "theme_color": "#5b2a86",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

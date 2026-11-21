@@ -1,0 +1,22 @@
+# One-click demo on Render: New → Blueprint → pick this repo, and set the blueprint path to
+# fertility-platform/render.yaml. Render gives you an https:// address; open it on a phone and use
+# "Add to Home screen" (Android Chrome: menu → Install app; iPhone Safari: Share → Add to Home Screen).
+# DEMO ONLY: free plans sleep when idle (first load can take a minute) and have limits that change,
+# so check Render's current free-tier terms. Never put real health data into the demo.
+services:
+  - type: web
+    name: cycle-tracker-demo
+    runtime: docker
+    rootDir: fertility-platform
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_OWNER_URL     # the owner login: used only to migrate the database and create the restricted app roles
+        fromDatabase: { name: cycle-demo-db, property: connectionString }
+      - key: MASTER_SECRET          # every key and password is derived from this one generated secret
+        generateValue: true
+      - key: ASSAY_PROFILE          # spec-provisional-1 (default) or mira-marquette-2021-preliminary (abstract-only source)
+        value: spec-provisional-1
+databases:
+  - name: cycle-demo-db
+    plan: free
