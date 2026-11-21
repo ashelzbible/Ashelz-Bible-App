@@ -179,6 +179,27 @@ Verified: Option A was run from a clean copy as a normal (non-root) user: privat
 the 9-check browser test, restart with data preserved, and clean shutdown. Option B (`docker-compose.yml`) was **not**
 run (no Docker daemon was available).
 
+## Android app (APK)
+
+`apps/android/` wraps the web app in a native Android shell with Capacitor (the files are bundled in the app).
+Build it with `bash apps/android/build-apk.sh` (needs Node 22, JDK 21 and the Android SDK with `platforms;android-35`
+and `build-tools;35.0.0`, `ANDROID_HOME` set), or run the **Build Android APK** workflow under GitHub → Actions and
+download the artifact. Result: `apps/android/dist/cycle-tracker-demo-debug.apk` (about 4 MB).
+
+**Install:** copy the APK to the phone, open it, and allow *Install unknown apps* for the app you opened it from
+(Android asks). It is a **debug-signed** build for testing: it is not for the Play Store, which needs a release
+key. Android may show a "not verified" warning.
+
+**First launch:** the app has no server of its own. Enter the **server address** of a running deployment (for
+example your Render address) together with your account details. After the first sign-in the address is remembered,
+entries are stored encrypted on the phone, and everything keeps working offline; it syncs when the server is
+reachable. **The server must use https**: cleartext `http://` is blocked in this build (it would expose health data on
+the network), so a plain `http://192.168.x.x` development server will not work. Auto-backup of the app's data is off.
+
+Not verified: the APK was built and inspected here (package, signature, bundled files, no cleartext, no backup) and
+the app's native-mode behaviour (server-address field, different-origin API calls, no service worker) was tested in a
+real browser with the Capacitor flag set, but it was **not run on an Android device or emulator**.
+
 ## Hosted demo and phone app
 
 The repo includes an installable **web app (PWA)** in `apps/pwa/` that the API serves at `/`, and a one-click
@@ -217,7 +238,7 @@ Render database permissions (the provisioner needs a database login that can cre
 * **No password reset or e-mail verification**, no refresh tokens (access tokens last `TOKEN_TTL`, default 1 h; the
   web app silently signs in again while open), and no account lockout beyond the per-IP rate limit.
   Clinician and admin accounts cannot self-register and there is no UI for provisioning them.
-* **No React Native app and no clinic dashboard** (roadmap phase 3); the demo web app is patient-only. No
+* **No React Native/SQLCipher app and no clinic dashboard** (roadmap phase 3); the demo apps (web and Android shell) are patient-only. No
   Cloudflare/AWS gateway config and no CI workflow. TLS 1.3 is assumed to terminate at the edge.
 * **No key management.** Keys come from the environment (the demo derives all of them from one `MASTER_SECRET`); there is no KMS integration or rotation
   (the `v1:` ciphertext envelope has no key id yet).

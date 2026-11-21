@@ -42,6 +42,8 @@ const schema = z.object({
   TOKEN_TTL: z.string().regex(/^\d+[smhd]$/, 'TOKEN_TTL must look like 15m, 1h or 7d').default('1h'),
   /** Run the recalculation worker inside the API process (single-container demo deployments). */
   RUN_WORKER: z.enum(['true', 'false']).default('false'),
+  /** Browser origins allowed to call the API cross-origin (the Android app's web view is http://localhost). */
+  CORS_ORIGINS: z.string().default('http://localhost'),
   /** Directory of the installable web app to serve at /. Unset = API only. */
   PWA_DIR: z.string().optional(),
 
@@ -68,6 +70,7 @@ export interface Config {
   assayProfile: string;
   tokenTtl: string;
   runWorker: boolean;
+  corsOrigins: string[];
   pwaDir?: string;
   rateLimitPerMinute: number;
 }
@@ -115,6 +118,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     assayProfile: e.ASSAY_PROFILE,
     tokenTtl: e.TOKEN_TTL,
     runWorker: e.RUN_WORKER === 'true',
+    corsOrigins: e.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
     pwaDir: e.PWA_DIR,
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
   };

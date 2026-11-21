@@ -154,6 +154,10 @@ describe('auth is absent without an identity service; static files are served', 
     expect(root.headers['content-security-policy']).not.toContain('upgrade-insecure-requests'); // NODE_ENV=test
     expect((await app.inject({ method: 'GET', url: '/sw.js' })).headers['cache-control']).toBe('no-cache');
     expect((await app.inject({ method: 'GET', url: '/missing.js' })).statusCode).toBe(404);
+    // static files carry no CORS headers or `Vary: Origin` (that would defeat the service worker's cache matching)
+    const withOrigin = await app.inject({ method: 'GET', url: '/', headers: { origin: 'http://localhost' } });
+    expect(withOrigin.headers['access-control-allow-origin']).toBeUndefined();
+    expect(String(withOrigin.headers.vary ?? '')).not.toMatch(/origin/i);
   });
 
   it('forces https subresources in production', async () => {

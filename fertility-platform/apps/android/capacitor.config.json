@@ -1,0 +1,7 @@
+{
+  "appId": "app.cycletracker.demo",
+  "appName": "Cycle Tracker Demo",
+  "webDir": "www",
+  "server": { "androidScheme": "http" },
+  "android": { "allowMixedContent": false }
+}

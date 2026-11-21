@@ -36,13 +36,15 @@ function statusBar(state) {
 
 export function loginView(state, on) {
   const registering = state.mode === 'register';
+  const server = h('input', { type: 'url', id: 'server', placeholder: 'https://your-server.example.com', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: state.prefillServer ?? '' });
   const email = h('input', { type: 'email', id: 'email', autocomplete: 'username', required: true, value: state.prefillEmail ?? '' });
   const pw = h('input', { type: 'password', id: 'password', autocomplete: registering ? 'new-password' : 'current-password', required: true, minlength: registering ? 10 : 1 });
   const name = h('input', { type: 'text', id: 'name', autocomplete: 'name' });
   const err = h('p', { className: 'error', role: 'alert', 'data-testid': 'error' }, state.error ?? '');
   const submit = h('button', { type: 'submit', className: 'full', 'data-testid': 'submit' }, registering ? 'Create account' : 'Sign in');
-  const form = h('form', { className: 'card', onsubmit: (e) => { e.preventDefault(); submit.disabled = true; on.submit({ email: email.value, password: pw.value, name: name.value }).finally(() => { submit.disabled = false; }); } },
+  const form = h('form', { className: 'card', onsubmit: (e) => { e.preventDefault(); submit.disabled = true; on.submit({ email: email.value, password: pw.value, name: name.value, server: server.value }).finally(() => { submit.disabled = false; }); } },
     h('h2', {}, registering ? 'Create your account' : 'Sign in'),
+    state.native ? [h('label', { for: 'server' }, 'Server address'), server, h('p', { className: 'muted' }, 'The address of the server this app syncs with. It is only needed for the first sign-in on this phone.')] : null,
     registering ? [h('label', { for: 'name' }, 'Your name'), name] : null,
     h('label', { for: 'email' }, 'Email'), email,
     h('label', { for: 'password' }, registering ? 'Password (at least 10 characters)' : 'Password'), pw,

@@ -1,0 +1,32 @@
+# Builds the Android app (a debug-signed APK) on demand: GitHub → Actions → "Build Android APK" → Run workflow,
+# then download the "cycle-tracker-demo-apk" artifact from the finished run.
+# Not run from this repository's CI before being added: if it fails, the log will say why.
+name: Build Android APK
+on:
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fertility-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fertility-platform/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - run: npm ci
+      - run: bash apps/android/build-apk.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cycle-tracker-demo-apk
+          path: fertility-platform/apps/android/dist/cycle-tracker-demo-debug.apk

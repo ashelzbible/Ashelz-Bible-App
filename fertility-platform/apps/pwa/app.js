@@ -1,4 +1,4 @@
-import { Api, NetworkError } from './lib/api.js';
+import { Api, NetworkError, getServerUrl, isNative, normalizeServerUrl, setServerUrl } from './lib/api.js';
 import { LamportClock } from './vendor/sync-protocol/clock.js';
 import { Vault, WrongPasswordError } from './lib/store.js';
 import { makeEvent, pendingCount, saveEvent, syncNow } from './lib/sync.js';
@@ -11,6 +11,7 @@ const state = {
   api: new Api(), vault: null, email: null, password: null, user: null,
   events: new Map(), clock: new LamportClock(0), deviceId: null, cursor: 0, predictions: null, lastSync: null,
   online: navigator.onLine, syncing: false,
+  native: isNative(), prefillServer: getServerUrl(),
 };
 
 const FORM_FIELDS = ['temp', 'lh', 'e3g', 'pdg'];
@@ -58,11 +59,19 @@ async function loadLocal(vault, user) {
 
 const loginHandlers = {
   toggleMode: () => { state.mode = state.mode === 'login' ? 'register' : 'login'; state.error = ''; render(); },
-  async submit({ email, password, name }) {
+  async submit({ email, password, name, server }) {
     state.error = '';
     email = email.trim().toLowerCase();
     state.prefillEmail = email; // keep it in the form if sign-in fails
     try {
+      if (state.native) { // the Android app has no home server: take the address from the form
+        if (server.trim()) {
+          const url = normalizeServerUrl(server);
+          if (!url) throw new Error('That server address does not look right. Example: https://your-server.example.com');
+          setServerUrl(url); state.prefillServer = url;
+        }
+        if (!getServerUrl() && (state.mode === 'register' || !(await Vault.exists(email)))) throw new Error('Enter the server address first.');
+      }
       if (state.mode === 'register') {
         if (password.length < 10) throw new Error('Password must be at least 10 characters.');
         if (!name.trim()) throw new Error('Please enter your name.');
@@ -165,5 +174,5 @@ window.addEventListener('offline', () => { state.online = false; if (state.vault
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void runSync({ quiet: true }); });
 setInterval(() => { if (state.vault && navigator.onLine) void runSync({ quiet: true }); }, 60_000);
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* app still works online */ });
+if (!state.native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* app still works online */ });
 render();

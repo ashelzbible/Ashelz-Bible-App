@@ -199,6 +199,31 @@ describe('consent endpoints', () => {
   });
 });
 
+describe('CORS (Android app origin)', () => {
+  const preflight = (origin: string) =>
+    app.inject({ method: 'OPTIONS', url: '/api/v1/sync/push', headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization,content-type' } });
+
+  it('allows the app origin (preflight and actual request) and nothing else', async () => {
+    const ok = await preflight('http://localhost');
+    expect(ok.statusCode).toBe(204);
+    expect(ok.headers['access-control-allow-origin']).toBe('http://localhost');
+    expect(String(ok.headers['access-control-allow-headers']).toLowerCase()).toContain('authorization');
+    const bad = await preflight('https://evil.example');
+    expect(bad.headers['access-control-allow-origin']).toBeUndefined();
+    const real = await app.inject({ method: 'GET', url: '/api/v1/sync/pull', headers: { origin: 'http://localhost' } });
+    expect(real.headers['access-control-allow-origin']).toBe('http://localhost');
+    const other = await app.inject({ method: 'GET', url: '/api/v1/sync/pull', headers: { origin: 'https://evil.example' } });
+    expect(other.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('origins are configurable', async () => {
+    const custom = await buildApp({ config: testConfig({ CORS_ORIGINS: 'https://a.example, http://localhost:3001' }), store });
+    const r = await custom.inject({ method: 'GET', url: '/api/v1/sync/pull', headers: { origin: 'http://localhost:3001' } });
+    await custom.close();
+    expect(r.headers['access-control-allow-origin']).toBe('http://localhost:3001');
+  });
+});
+
 describe('operations', () => {
   it('health is public; readiness reflects the database; security headers are set', async () => {
     const h = await app.inject({ method: 'GET', url: '/healthz' });

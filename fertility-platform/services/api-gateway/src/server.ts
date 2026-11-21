@@ -1,4 +1,5 @@
 import { pullQuerySchema, pushRequestSchema, uuid } from '@fertility/sync-protocol';
+import cors, { type FastifyCorsOptions } from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -50,6 +51,27 @@ export async function buildApp({ config, store, identity, logger = false }: AppD
         'upgrade-insecure-requests': config.nodeEnv === 'production' ? [] : null,
       },
     },
+  });
+  // Cross-origin access for the Android app only (its web view origin); the web app is same-origin. The API uses
+  // bearer tokens, not cookies, so allowing an origin grants no ambient credentials.
+  await app.register(cors, () => (req: FastifyRequest, callback: (error: Error | null, options: FastifyCorsOptions) => void) => {
+    // API routes only: static files must stay free of CORS headers (and `Vary: Origin`, which breaks the
+    // service worker's cache matching).
+    if (!req.url.startsWith('/api/')) return callback(null, { origin: false });
+    callback(null, {
+      origin: config.corsOrigins,
+      methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['authorization', 'content-type'],
+      maxAge: 600,
+    });
+  });
+  // The plugin adds `Vary: Origin` even where CORS is off; drop that token outside the API so static files stay cacheable.
+  app.addHook('onSend', async (req, reply) => {
+    if (req.url.startsWith('/api/')) return;
+    const vary = reply.getHeader('vary');
+    if (typeof vary !== 'string') return;
+    const rest = vary.split(',').map((v) => v.trim()).filter((v) => v && v.toLowerCase() !== 'origin');
+    if (rest.length) void reply.header('vary', rest.join(', ')); else void reply.removeHeader('vary');
   });
   await app.register(rateLimit, {
     max: config.rateLimitPerMinute,
