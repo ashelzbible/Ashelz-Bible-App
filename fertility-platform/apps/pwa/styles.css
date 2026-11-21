@@ -23,7 +23,7 @@ h1 { font-size: 22px; margin: 8px 0 12px; }
 h2 { font-size: 17px; margin: 0 0 8px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 0 0 12px; }
 label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
-input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select {
+input[type=text], input[type=email], input[type=password], input[type=url], input[type=date], input[type=number], select {
   width: 100%; min-height: 46px; padding: 10px 12px; font: inherit; color: var(--ink);
   background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
 }

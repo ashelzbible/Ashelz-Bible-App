@@ -6,6 +6,7 @@ import { makeEvent, markAllPending, pendingCount, saveEvent, syncNow } from './l
 import { computePredictions, DEFAULT_PROFILE, getProfile } from './lib/engine/index.js';
 import { accountView, chartView, effectiveOn, loginView, nav, todayView, todayLocal } from './lib/view.js';
 
+export const APP_VERSION = '1.1';
 const root = document.getElementById('app');
 const state = {
   mode: 'login', tab: 'today', date: todayLocal(), error: '', msg: '', msgKind: 'ok', syncError: '',
@@ -14,7 +15,7 @@ const state = {
   online: navigator.onLine, syncing: false,
   native: isNative(), serverMode: 'none', prefillServer: getServerUrl(),
   cloud: false, // does this account sync with a server? Device-only accounts never touch the network.
-  profileName: DEFAULT_PROFILE.name,
+  profileName: DEFAULT_PROFILE.name, version: APP_VERSION,
 };
 
 // ---- rendering -------------------------------------------------------------------------------------------------
@@ -90,6 +91,7 @@ async function setProfile(name) {
 // ---- sign in / create account ------------------------------------------------------------------------------------
 const loginHandlers = {
   toggleMode: () => { state.mode = state.mode === 'login' ? 'register' : 'login'; state.error = ''; render(); },
+  toggleServer: () => { state.showServer = !state.showServer; render(); },
 
   async submit({ email, password, name, server, sync }) {
     state.error = '';
@@ -98,7 +100,7 @@ const loginHandlers = {
     state.prefillSync = sync;
     try {
       const wantServer = state.mode === 'register' ? sync && state.serverMode !== 'none' : false;
-      if (state.native && (wantServer || (state.mode === 'login' && server.trim()))) {
+      if (state.native && (wantServer || (state.mode === 'login' && state.showServer && server.trim()))) {
         const url = normalizeServerUrl(server);
         if (!url) throw new Error('That server address does not look right. Example: https://your-server.example.com');
         setServerUrl(url); state.prefillServer = url;
@@ -139,7 +141,7 @@ async function signIn({ email, password }) {
   }
   // No data for this email on this phone: a synced account can be opened here by signing in to its server.
   if (state.serverMode === 'none' || (state.native && !getServerUrl())) {
-    throw new Error('No account with this email on this device. Create one first.');
+    throw new Error(state.native ? 'No account with this email on this phone. Create one, or use "Sign in to a synced account from another phone".' : 'No account with this email on this device. Create one first.');
   }
   let r;
   try { r = await state.api.login(email, password); } catch (e) {

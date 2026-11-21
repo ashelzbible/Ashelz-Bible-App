@@ -33,6 +33,8 @@ const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String
 
 try {
   await page.goto(`http://localhost:${port}/`);
+  assert.equal(await page.getByTestId('server-box').isHidden(), true, 'the sign-in screen does not ask for a server by default');
+  await page.getByTestId('toggle-server').click();
   await page.locator('#server').waitFor();
   assert.equal(await page.evaluate(() => navigator.serviceWorker?.controller ?? null), null);
   assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), 0);

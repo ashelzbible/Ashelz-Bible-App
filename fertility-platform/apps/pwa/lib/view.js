@@ -48,10 +48,11 @@ export function loginView(state, on) {
   const name = h('input', { type: 'text', id: 'name', autocomplete: 'name' });
   const server = h('input', { type: 'url', id: 'server', placeholder: 'https://your-server.example.com', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: state.prefillServer ?? '' });
   const sync = h('input', { type: 'checkbox', id: 'sync', checked: sm === 'same-origin' ? (state.prefillSync ?? true) : (state.prefillSync ?? false) });
-  const serverBox = h('div', { hidden: !(sm === 'native' && (!registering || sync.checked)), 'data-testid': 'server-box' },
+  const serverShown = () => sm === 'native' && (registering ? sync.checked : !!state.showServer);
+  const serverBox = h('div', { hidden: !serverShown(), 'data-testid': 'server-box' },
     h('label', { for: 'server' }, registering ? 'Server address' : 'Server address (optional)'), server,
-    h('p', { className: 'muted' }, registering ? 'Where to sync and back up your entries.' : 'Only needed to sign in to a synced account on a new phone. Leave empty to use this device only.'));
-  sync.addEventListener('change', () => { serverBox.hidden = !(sm === 'native' && sync.checked); });
+    h('p', { className: 'muted' }, registering ? 'Where to sync and back up your entries.' : 'The server your synced account lives on.'));
+  sync.addEventListener('change', () => { serverBox.hidden = !serverShown(); });
   const err = h('p', { className: 'error', role: 'alert', 'data-testid': 'error' }, state.error ?? '');
   const submit = h('button', { type: 'submit', className: 'full', 'data-testid': 'submit' }, registering ? 'Create account' : 'Sign in');
   const form = h('form', { className: 'card', onsubmit: (e) => { e.preventDefault(); submit.disabled = true; on.submit({ email: email.value, password: pw.value, name: name.value, server: server.value, sync: sync.checked }).finally(() => { submit.disabled = false; }); } },
@@ -61,13 +62,15 @@ export function loginView(state, on) {
     h('label', { for: 'password' }, registering ? 'Password (at least 10 characters)' : 'Password'), pw,
     registering && sm !== 'none' ? h('label', { className: 'check', for: 'sync' }, sync, 'Also sync and back up with a server (optional)') : null,
     registering && sm === 'none' ? h('p', { className: 'muted' }, 'No server needed: your account, entries and results all stay on this device.') : null,
+    !registering && sm === 'native' ? h('button', { type: 'button', className: 'link', onclick: on.toggleServer, 'data-testid': 'toggle-server' }, state.showServer ? 'Hide server address' : 'Sign in to a synced account from another phone') : null,
     serverBox,
     err, h('div', { className: 'stack' }, submit,
       h('button', { type: 'button', className: 'secondary full', onclick: on.toggleMode, 'data-testid': 'toggle-mode' }, registering ? 'I already have an account' : 'Create an account')));
   return h('div', {},
     h('h1', {}, 'Cycle Tracker'),
     h('p', { className: 'muted' }, 'Your entries are stored encrypted on this device and work without a connection. Your password unlocks them, so it cannot be reset: keep it safe.'),
-    form);
+    form,
+    h('p', { className: 'muted', 'data-testid': 'version' }, `Version ${state.version} · works without a server`));
 }
 
 export function todayView(state, on) {
@@ -172,7 +175,7 @@ export function accountView(state, on) {
     h('div', { className: 'card' }, h('h2', {}, 'This device'),
       h('p', { className: 'muted' }, 'Entries are encrypted on this device and unlock with your password, even offline.'),
       h('button', { className: 'danger full', onclick: on.wipe, 'data-testid': 'wipe' }, 'Delete data on this device')),
-    h('p', { className: 'muted' }, 'Demo build. Not a medical device.'));
+    h('p', { className: 'muted' }, `Demo build ${state.version}. Not a medical device.`));
 }
 
 export function nav(state, on) {
