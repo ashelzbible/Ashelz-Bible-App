@@ -74,7 +74,7 @@ SPEC_PROVISIONAL = AssayProfile(
         "PdG >= 5.0 ug/mL on 3 consecutive first-morning days: supported by Ecochard 2013 (107 women, 283 ovulatory "
         "cycles, ultrasound reference; 3-day model specificity 1.00 / sensitivity 0.92 when counted after the end of "
         "fertile mucus, 0.986 / 0.72 after a first positive LH kit at 20 mIU/mL; the paper says '>' 5, has no "
-        "validation set, European women only) and a small pilot (Bouchard 2019). "
+        "validation set, European women only); a small pilot (Bouchard 2019) adds little (any-positive strip outcome, LH reference). "
         "E3G >= 1.5x follicular baseline, LH >= 2.5x baseline and LH >= 25 mIU/mL are PROVISIONAL specification "
         "values: no source uses them. Inito 2023 uses E3G >= 1.5x the PREVIOUS day and LH >= baseline + 5 mIU/mL; "
         "Ecochard used an LH kit threshold of 20 mIU/mL. All are assay-specific."
