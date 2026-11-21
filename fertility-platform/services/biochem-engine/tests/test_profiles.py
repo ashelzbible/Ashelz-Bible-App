@@ -20,7 +20,7 @@ def test_default_profile_holds_the_specification_values_and_is_labelled_provisio
     assert p is DEFAULT_PROFILE
     assert (p.baseline_readings, p.e3g_rise_factor, p.lh_surge_factor, p.lh_surge_absolute, p.pdg_confirm, p.pdg_days) == (
         5, Fraction(3, 2), Fraction(5, 2), 25, 5, 3)
-    assert "NO published source" in p.evidence
+    assert "PROVISIONAL" in p.evidence and "Ecochard 2013" in p.evidence
 
 
 def test_unknown_profile_is_rejected_with_the_available_names():

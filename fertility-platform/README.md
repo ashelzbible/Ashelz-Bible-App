@@ -43,19 +43,32 @@ INSUFFICIENT_DATA. A temperature alone never yields LOW before a confirmed shift
 
 ### Evidence status of the thresholds
 
-Checked against published sources (full texts read where noted; several papers could not be opened).
+Primary sources read in full: Ecochard 2013 (*Steroids*, author manuscript), Pattnaik 2023 (*Sci Rep*, Inito;
+vendor-authored), Bouchard 2019 (*Front Public Health*), Shilaih 2018 (*Biosci Rep*). Sources not obtained are
+marked unverified.
 
 | Rule | Status |
 |---|---|
-| PdG ≥ 5.0 µg/mL on 3 consecutive first-morning days after the LH surge | **Pilot-level support.** Bouchard 2019 (read in full): 3 consecutive positives at 5 µg/mL, counted from the second Peak LH reading; 82% of 17 cycles positive (7 µg/mL: 59%); 34 cycles, 13 women, LH-surge reference, not ultrasound. The "100% specificity" figure is attributed to Ecochard 2013, which could not be opened and is **unverified**. |
-| BBT 3-over-6, third reading ≥ 0.20 °C above the coverline | **0.20 °C is consistent with the one paper read** (Shilaih 2018: ≥ 0.2 °C above at least 5 of the preceding 6 days, 3 consecutive days) — but that paper used wrist *skin* temperature and compares against each of the six days, not against their maximum, so the coverline form here is a variant. The originator of the rule was not verified. A "0.3 °C" figure seen in one search summary was **not** found in the text. |
-| E3G ≥ 1.5× baseline; LH ≥ 2.5× baseline; LH ≥ 25 mIU/mL | **No published source found.** A small case report (8 women) used *absolute* Mira cut-offs (E3G > 100 ng/mL; LH 11 mIU/mL, itself cited to a paper not read). Absolute values are device/assay-specific. These three numbers come from the product specification only. |
-| Anovulation / PCOS hints | Not implemented. The 2023 international PCOS guideline (Teede et al.) keeps the Rotterdam criteria; AMH has no single cut-off across assays. |
+| PdG ≥ 5.0 µg/mL on 3 consecutive first-morning days after the LH surge | **Supported by one ultrasound-referenced study.** Ecochard 2013 (107 women, 283 ovulatory cycles): 3-day model, threshold 5 µg/mL — counted after the end of fertile mucus: specificity **1.00**, sensitivity 0.92; after a first positive LH kit (20 mIU/mL): specificity **0.986**, sensitivity **0.72** (only 76 % of cycles reached that LH positive). The abstract's "100 %" holds for the mucus start only. Authors state: no validation set, estimates "can be overly optimistic", European women only, one threshold cannot cover reduced luteal PdG (PCOS, perimenopause). Bouchard 2019 pilot (34 cycles, LH reference): 82 % positive at 5 µg/mL. |
+| BBT 3-over-6, third reading ≥ 0.20 °C above the coverline | **0.20 °C is consistent with the one paper read** (Shilaih 2018: ≥ 0.2 °C above at least 5 of the preceding 6 days, 3 consecutive days) — but that used wrist *skin* temperature and compares against each of the six days, not their maximum, so the coverline form is a variant. Originator not verified; a "0.3 °C" figure from a search summary was not found in the text. |
+| LH ≥ 2.5× baseline or ≥ 25 mIU/mL | **No source uses these values.** Ecochard's LH kit threshold was 20 mIU/mL (20 → specificity 0.95 / sensitivity 0.43 for detecting ovulation; 25 → 0.97 / 0.34). Pattnaik 2023 defines a surge as LH **baseline + 5 mIU/mL**. Thresholds are assay-specific. |
+| E3G ≥ 1.5× follicular baseline | **No source uses this reference.** Pattnaik 2023 uses ≥ 1.5× the **previous day**, expects the E3G surge 5–6 days before the LH peak, and reports an early E3G > 100 ng/mL in 20 cycles. |
+| Anovulation | Pattnaik 2023 proposes PdG ≥ 2.75× pre-LH baseline within 3 days after the LH surge (100 % / 100 %, n = 100; reference: mid-luteal PdG > 5 µg/mL, **not** ultrasound; vendor-authored). Not implemented. The 2023 international PCOS guideline (Teede et al.) is not read in full. |
+
+Open points the papers raise for the engine (none changed yet — each is a clinical decision):
+
+1. **`≥ 5.0` vs `> 5`.** Ecochard defines positivity as "above" the threshold. The engine uses ≥ (the product spec).
+2. **Where PdG counting starts.** Ecochard counts from a first positive LH kit or the end of fertile mucus. The
+   engine counts days after the LH *peak*, which is later and so more conservative; a mucus-based start is not implemented.
+3. **LH peak = first surge episode.** Pattnaik reports multiple LH surges before the ovulating one in 39 of 55
+   ovulatory cycles, and defines the ovulation day as the *highest* LH value. The first-episode rule can pick a
+   premature surge.
+4. **Reduced luteal PdG** (PCOS, perimenopause, luteal-phase deficiency) means a fixed 5 µg/mL can miss ovulation.
 
 Because of this, thresholds are **not hard-coded**: each prediction is computed under a named `AssayProfile`
 and stored with the version `biochem-<engine>+<profile>` (e.g. `biochem-1.0.0+spec-provisional-1`).
 The only registered profile is `spec-provisional-1` (the specification values, labelled provisional in its
-`evidence` field). Add a device-specific profile only after its thresholds are verified against a source; the
+`evidence` field). Add a device-specific profile only after its thresholds are verified against a source (note Pattnaik's LH and E3G rules use an increment and a day-over-day ratio, which the current profile fields cannot express); the
 `/v1/analyze` request accepts `"profile"`, and an unknown name is rejected. The gateway worker currently always
 uses the default profile (selecting a profile per user or device is not wired yet).
 
